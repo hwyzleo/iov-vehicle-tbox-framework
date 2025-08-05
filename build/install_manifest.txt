@@ -1,0 +1,6 @@
+/usr/local/lib/cmake/HWYZ/HWYZConfig.cmake
+/usr/local/lib/pkgconfig/HWYZ.pc
+/usr/local/lib/libhwyz.dylib
+/usr/local/include/application.h
+/usr/local/lib/cmake/HWYZ/HWYZTargets.cmake
+/usr/local/lib/cmake/HWYZ/HWYZTargets-noconfig.cmake
