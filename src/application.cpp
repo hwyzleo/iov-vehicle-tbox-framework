@@ -7,9 +7,9 @@
 #include <fstream>
 #include <sstream>
 
-#include "../third_party/include/spdlog/spdlog.h"
-#include "../third_party/include/spdlog/sinks/stdout_color_sinks.h"
-#include "../third_party/include/spdlog/sinks/basic_file_sink.h"
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
 #include "application.h"
 
@@ -74,6 +74,7 @@ namespace hwyz {
             return false;
         }
         config_ = YAML::LoadFile(file_path);
+        std::cout << "加载配置文件[" + file_path + "]成功" << std::endl;
         return true;
     }
 

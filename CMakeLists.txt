@@ -13,7 +13,7 @@ file(GLOB_RECURSE FRAMEWORK_HEADERS include/*.h)
 add_library(hwyz SHARED
         ${FRAMEWORK_SOURCES}
         ${FRAMEWORK_HEADERS}
-        third_party/include/yaml-cpp/parser.h)
+        )
 set_target_properties(hwyz PROPERTIES
         LINKER_LANGUAGE CXX
         )
@@ -33,13 +33,16 @@ elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     endif ()
 endif ()
 
-# 添加库文件目录
+# 添加三方库
 if(EXISTS ${LIB_DIR}/yaml-cpp)
     target_link_directories(hwyz PRIVATE ${LIB_DIR}/yaml-cpp)
     target_link_libraries(hwyz PRIVATE yaml-cpp)
 else()
     message(WARNING "YAML library directory not found: ${LIB_DIR}/yaml-cpp")
 endif()
+find_package(OpenSSL REQUIRED)
+target_include_directories(hwyz PUBLIC ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(hwyz PRIVATE ${OPENSSL_LIBRARIES})
 
 # 设置包含目录
 target_include_directories(hwyz

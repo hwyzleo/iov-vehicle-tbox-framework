@@ -5,8 +5,6 @@
 #ifndef IOV_VEHICLE_TBOX_FRAMEWORK_APPLICATION_H
 #define IOV_VEHICLE_TBOX_FRAMEWORK_APPLICATION_H
 
-#endif //IOV_VEHICLE_TBOX_FRAMEWORK_APPLICATION_H
-
 #pragma once
 
 #include "yaml-cpp/yaml.h"
@@ -77,3 +75,5 @@ namespace hwyz {
             return -1; \
         } \
     }
+
+#endif //IOV_VEHICLE_TBOX_FRAMEWORK_APPLICATION_H
