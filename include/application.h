@@ -28,6 +28,9 @@ namespace hwyz {
     protected:
         Application();
 
+        // 获取配置参数
+        YAML::Node getConfig() const;
+
         // 初始化
         virtual bool initialize();
 
@@ -36,9 +39,6 @@ namespace hwyz {
 
         // 主方法
         virtual int execute() = 0;
-
-        // 配置参数
-        YAML::Node config_;
 
     private:
         // 加载默认配置文件
@@ -55,6 +55,9 @@ namespace hwyz {
 
         // 退出请求
         static volatile sig_atomic_t shutdown_requested_;
+
+        // 配置参数
+        YAML::Node config_;
 
     };
 

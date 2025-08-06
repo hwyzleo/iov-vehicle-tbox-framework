@@ -54,6 +54,10 @@ namespace hwyz {
         }
     }
 
+    YAML::Node Application::getConfig() const {
+        return config_;
+    }
+
     bool Application::initialize() {
         return true;
     }
