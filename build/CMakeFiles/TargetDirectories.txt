@@ -1,7 +1,0 @@
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/hwyz.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/edit_cache.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/rebuild_cache.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/list_install_components.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/install.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/install/local.dir
-/Users/hwyz_leo/Projects/open-iov/vehicle/tbox/iov-vehicle-tbox-framework/build/CMakeFiles/install/strip.dir
