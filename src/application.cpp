@@ -36,8 +36,9 @@ namespace hwyz {
             setup_logging();
             // 设置信号处理
             setup_signal_handlers();
-            // 执行用户初始化
+            // 执行初始化
             if (!initialize()) {
+                std::cerr << "初始化失败" << std::endl;
                 return -1;
             }
             // 执行主逻辑
