@@ -8,6 +8,6 @@
 #include <string>
 
 // 版本
-#define MCU_VERSION "persist.mcu_version"
+#define MCU_VERSION "persist.tbox_mcu_version"
 
 #endif //FRAMEWORK_PERSIST_KEY_H
