@@ -37,6 +37,7 @@ namespace hwyz {
 
         /**
         * 重命名文件
+        * 新文件路径有文件也会被覆盖
         * @param old_path 原文件路径
         * @param new_path 新文件路径
         * @return 是否成功

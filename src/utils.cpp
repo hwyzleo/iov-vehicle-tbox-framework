@@ -2,6 +2,8 @@
 // Created by hwyz_leo on 2025/8/6.
 //
 #include <fstream>
+#include <cerrno>
+#include <cstring>
 
 #include "spdlog/spdlog.h"
 #include <openssl/aes.h>
@@ -14,7 +16,9 @@
 #include <io.h>
 #define access _access
 #else
+
 #include <unistd.h>
+
 #endif
 
 namespace hwyz {
@@ -35,6 +39,13 @@ namespace hwyz {
     }
 
     bool Utils::rename_file(const std::string &old_path, const std::string &new_path) {
+#ifdef _WIN32
+        // Windows不会覆盖，所以需要先删除目标文件
+        if (std::remove(new_path.c_str()) != 0 && errno != ENOENT) {
+            spdlog::warn("删除新文件路径[{}]失败", new_path);
+            return false;
+        }
+#endif
         int result = std::rename(old_path.c_str(), new_path.c_str());
         if (result != 0) {
             spdlog::warn("重命名文件[{} -> {}]失败", old_path, new_path);
