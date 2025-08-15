@@ -6,12 +6,19 @@
 #define FRAMEWORK_UTILS_H
 
 #include <iostream>
+#include <fstream>
+#include <mutex>
 
 namespace hwyz {
     static const std::string base64_chars =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
             "abcdefghijklmnopqrstuvwxyz"
             "0123456789+/";
+
+    // 全局键值
+    enum global_key_t {
+        ICCID = 1, // ICCID
+    };
 
     class Utils {
     public:
@@ -88,6 +95,25 @@ namespace hwyz {
         static std::vector<unsigned char> aes_decrypt(const std::vector<unsigned char> &encrypted_bytes,
                                                       const std::vector<unsigned char> &key,
                                                       const std::vector<unsigned char> &iv);
+
+        /**
+         * 全局写入字符串
+         * @param global_key key
+         * @param value 值
+         */
+        static void global_write_string(global_key_t global_key, const std::string& value);
+
+        /**
+         * 全局读取字符串
+         * @param global_key 全局key
+         */
+        static std::string global_read_string(global_key_t global_key);
+
+    private:
+        // 全局KEY锁
+        static std::mutex global_key_mutex_;
+        // 全局KEY文件路径
+        static std::string global_key_file_path_;
     };
 }
 

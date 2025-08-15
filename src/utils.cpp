@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cerrno>
 #include <cstring>
+#include <map>
 
 #include "spdlog/spdlog.h"
 #include <openssl/aes.h>
@@ -22,6 +23,9 @@
 #endif
 
 namespace hwyz {
+
+    std::mutex Utils::global_key_mutex_;
+    std::string Utils::global_key_file_path_ = "/tmp/global_key.dat";
 
     bool Utils::file_exists(const std::string &file_path) {
         return (access(file_path.c_str(), F_OK) == 0);
@@ -235,5 +239,48 @@ namespace hwyz {
         plaintext_len += len;
         plaintext.resize(plaintext_len);
         return plaintext;
+    }
+
+    void Utils::global_write_string(global_key_t global_key, const std::string &value) {
+        std::lock_guard<std::mutex> lock(global_key_mutex_);
+        std::map<int, std::string> kv_data;
+        std::ifstream read_file(global_key_file_path_);
+        std::string line;
+        while (std::getline(read_file, line)) {
+            size_t pos = line.find('=');
+            if (pos != std::string::npos) {
+                try {
+                    int key = std::stoi(line.substr(0, pos));
+                    std::string existing_value = line.substr(pos + 1);
+                    kv_data[key] = existing_value;
+                } catch (...) {
+                }
+            }
+        }
+        read_file.close();
+        kv_data[global_key] = value;
+        std::ofstream write_file(global_key_file_path_, std::ios::trunc);
+        for (const auto& pair : kv_data) {
+            write_file << pair.first << "=" << pair.second << std::endl;
+        }
+    }
+
+    std::string Utils::global_read_string(global_key_t global_key) {
+        std::lock_guard<std::mutex> lock(global_key_mutex_);
+        std::ifstream file(global_key_file_path_);
+        std::string line;
+        while (std::getline(file, line)) {
+            size_t pos = line.find('=');
+            if (pos != std::string::npos) {
+                try {
+                    int key = std::stoi(line.substr(0, pos));
+                    if (key == global_key) {
+                        return line.substr(pos + 1);
+                    }
+                } catch (...) {
+                }
+            }
+        }
+        return "";
     }
 }
