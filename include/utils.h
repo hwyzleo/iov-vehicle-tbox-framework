@@ -17,7 +17,9 @@ namespace hwyz {
 
     // 全局键值
     enum global_key_t {
-        ICCID = 1, // ICCID
+        VIN = 1, // 车架号
+        CURRENT_ICCID = 2, // 当前ICCID
+        BATTERY_PACK_CODE = 3, // 电池包编号
     };
 
     class Utils {
