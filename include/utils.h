@@ -19,7 +19,7 @@ namespace hwyz {
     enum global_key_t {
         VIN = 1, // 车架号
         CURRENT_ICCID = 2, // 当前ICCID
-        BATTERY_PACK_CODE = 3, // 电池包编号
+        BATTERY_PACK_SN = 3, // 电池包序列号
         TBOX_SN = 11, // TBox序列号
         TBOX_MCU_VERSION = 101, // TBox MCU版本
     };
