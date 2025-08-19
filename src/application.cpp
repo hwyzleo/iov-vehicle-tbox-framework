@@ -99,9 +99,14 @@ namespace hwyz {
     }
 
     void Application::setup_signal_handlers() {
-        signal(SIGINT, signal_handler);   // Ctrl+C
-        signal(SIGTERM, signal_handler);  // 终止信号
-        signal(SIGSEGV, signal_handler);  // 段错误
+        struct sigaction sa{};
+        sa.sa_handler = signal_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+
+        sigaction(SIGINT, &sa, nullptr);   // Ctrl+C
+        sigaction(SIGTERM, &sa, nullptr);  // 终止信号
+        sigaction(SIGSEGV, &sa, nullptr);  // 段错误
     }
 
     void Application::signal_handler(int signal) {
