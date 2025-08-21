@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <mutex>
+#include <chrono>
 
 namespace hwyz {
     static const std::string base64_chars =
@@ -62,6 +63,24 @@ namespace hwyz {
         static std::string get_current_date();
 
         /**
+         * 获取秒级时间戳
+         * @return 秒级时间戳
+         */
+        static long long get_current_timestamp_sec();
+
+        /**
+         * 获取毫秒级时间戳
+         * @return 毫秒级时间戳
+         */
+        static long long get_current_timestamp_ms();
+
+        /**
+         * 获取微秒级时间戳
+         * @return 微秒级时间戳
+         */
+        static long long get_current_timestamp_us();
+
+        /**
         * 十六进制字符串转字节数组
         * @param hex_str 十六进制字符串
         * @return 字节数组
@@ -105,7 +124,7 @@ namespace hwyz {
          * @param global_key key
          * @param value 值
          */
-        static void global_write_string(global_key_t global_key, const std::string& value);
+        static void global_write_string(global_key_t global_key, const std::string &value);
 
         /**
          * 全局读取字符串

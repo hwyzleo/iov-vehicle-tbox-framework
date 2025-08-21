@@ -78,6 +78,21 @@ namespace hwyz {
         return date;
     }
 
+    long long Utils::get_current_timestamp_sec() {
+        return std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+    long long Utils::get_current_timestamp_ms() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+    long long Utils::get_current_timestamp_us() {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
     std::vector<unsigned char> Utils::hex_to_bytes(const std::string &hex_str) {
         if (hex_str.length() % 2 != 0) {
             throw std::invalid_argument("Hex string length must be even");
@@ -260,7 +275,7 @@ namespace hwyz {
         read_file.close();
         kv_data[global_key] = value;
         std::ofstream write_file(global_key_file_path_, std::ios::trunc);
-        for (const auto& pair : kv_data) {
+        for (const auto &pair: kv_data) {
             write_file << pair.first << "=" << pair.second << std::endl;
         }
     }
