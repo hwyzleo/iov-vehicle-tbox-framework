@@ -10,6 +10,8 @@
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
 
 #include "utils.h"
 
@@ -135,85 +137,47 @@ namespace hwyz {
     }
 
     std::string Utils::base64_encode(const std::string &input) {
-        std::string ret;
-        int i = 0;
-        int j = 0;
-        unsigned char char_array_3[3];
-        unsigned char char_array_4[4];
+        BIO *bio, *b64;
+        BUF_MEM *bufferPtr;
 
-        for (char c: input) {
-            char_array_3[i++] = c;
-            if (i == 3) {
-                char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-                char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-                char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-                char_array_4[3] = char_array_3[2] & 0x3f;
+        b64 = BIO_new(BIO_f_base64());
+        bio = BIO_new(BIO_s_mem());
+        bio = BIO_push(b64, bio);
 
-                for (i = 0; i < 4; i++)
-                    ret += base64_chars[char_array_4[i]];
-                i = 0;
-            }
-        }
+        // 不要在编码的输出中插入换行符
+        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
 
-        if (i) {
-            for (j = i; j < 3; j++)
-                char_array_3[j] = '\0';
+        BIO_write(bio, input.c_str(), input.length());
+        BIO_flush(bio);
+        BIO_get_mem_ptr(bio, &bufferPtr);
 
-            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-            char_array_4[3] = char_array_3[2] & 0x3f;
+        std::string result(bufferPtr->data, bufferPtr->length);
+        BIO_free_all(bio);
 
-            for (j = 0; j < i + 1; j++)
-                ret += base64_chars[char_array_4[j]];
-
-            while (i++ < 3)
-                ret += '=';
-        }
-
-        return ret;
+        return result;
     }
 
     std::string Utils::base64_decode(const std::string &input) {
-        int in_len = input.size();
-        int i = 0;
-        int j = 0;
-        int in_ = 0;
-        unsigned char char_array_4[4], char_array_3[3];
-        std::string ret;
+        BIO *bio, *b64;
 
-        while (in_len-- && (input[in_] != '=') && (isalnum(input[in_]) || (input[in_] == '+') || (input[in_] == '/'))) {
-            char_array_4[i++] = input[in_];
-            in_++;
-            if (i == 4) {
-                for (i = 0; i < 4; i++)
-                    char_array_4[i] = base64_chars.find(char_array_4[i]);
+        int decodeLen = input.length();
+        char* buffer = new char[decodeLen + 1];
+        buffer[decodeLen] = '\0';
 
-                char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-                char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-                char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+        bio = BIO_new_mem_buf(input.c_str(), -1);
+        b64 = BIO_new(BIO_f_base64());
+        bio = BIO_push(b64, bio);
 
-                for (i = 0; (i < 3); i++)
-                    ret += char_array_3[i];
-                i = 0;
-            }
-        }
+        // 不要期望换行符
+        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
 
-        if (i) {
-            for (j = i; j < 4; j++)
-                char_array_4[j] = 0;
+        int length = BIO_read(bio, buffer, decodeLen);
+        BIO_free_all(bio);
 
-            for (j = 0; j < 4; j++)
-                char_array_4[j] = base64_chars.find(char_array_4[j]);
+        std::string result(buffer, length);
+        delete[] buffer;
 
-            char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-            char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-            for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
-        }
-
-        return ret;
+        return result;
     }
 
     std::vector<unsigned char>

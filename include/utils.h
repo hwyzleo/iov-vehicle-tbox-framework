@@ -11,10 +11,6 @@
 #include <chrono>
 
 namespace hwyz {
-    static const std::string base64_chars =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "abcdefghijklmnopqrstuvwxyz"
-            "0123456789+/";
 
     // 全局键值
     enum global_key_t {
