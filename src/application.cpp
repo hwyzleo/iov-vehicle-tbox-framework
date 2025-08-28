@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <future>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -14,9 +15,6 @@
 #include "application.h"
 
 namespace hwyz {
-
-    // 退出请求
-    volatile sig_atomic_t Application::shutdown_requested_ = 0;
 
     // 信号处理函数指针
     static Application *g_app_instance = nullptr;
@@ -42,13 +40,31 @@ namespace hwyz {
                 return -1;
             }
             // 执行主逻辑
-            int result = execute();
+            auto future = std::async(std::launch::async, [this]() {
+                try {
+                    int result = this->execute();
+                    spdlog::info("主逻辑执行完成，返回值[{}]", result);
+                    return result;
+                } catch (const std::exception &e) {
+                    spdlog::error("主逻辑发生异常[{}]", e.what());
+                    return -1;
+                }
+            });
+            // 检查退出场景
+            bool is_check = false;
             while (!shutdown_requested_) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+                if (!is_check && future.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready) {
+                    int result = future.get();
+                    is_check = true;
+                    if (result != 0) {
+                        break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
             // 清理资源
             cleanup();
-            return result;
+            return 0;
         } catch (const std::exception &e) {
             std::cerr << "应用启动失败: " << e.what() << std::endl;
             return -1;
@@ -96,6 +112,7 @@ namespace hwyz {
             logger->set_level(spdlog::level::debug);
             spdlog::set_default_logger(logger);
         }
+        std::cout << "初始化日志成功" << std::endl;
     }
 
     void Application::setup_signal_handlers() {
@@ -104,15 +121,30 @@ namespace hwyz {
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = 0;
 
-        sigaction(SIGINT, &sa, nullptr);   // Ctrl+C
-        sigaction(SIGTERM, &sa, nullptr);  // 终止信号
-        sigaction(SIGSEGV, &sa, nullptr);  // 段错误
+        if (sigaction(SIGABRT, &sa, nullptr) == -1) {
+            std::cerr << "注册SIGABRT信号失败" << std::endl;
+        }
+        // Ctrl+C
+        if (sigaction(SIGINT, &sa, nullptr) == -1) {
+            std::cerr << "注册SIGINT信号失败" << std::endl;
+        }
+        // 终止信号
+        if (sigaction(SIGTERM, &sa, nullptr) == -1) {
+            std::cerr << "注册SIGTERM信号失败" << std::endl;
+        }
+        // 段错误
+        if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
+            std::cerr << "注册SIGSEGV信号失败" << std::endl;
+        }
+        std::cout << "设置信号处理成功" << std::endl;
     }
 
     void Application::signal_handler(int signal) {
+        char msg[100];
+        int len = snprintf(msg, sizeof(msg), "收到信号: %d\n", signal);
+        write(STDOUT_FILENO, msg, len);
         if (g_app_instance) {
-            std::cout << "收到系统信号: " << signal << std::endl;
-            shutdown_requested_ = 1;
+            g_app_instance->shutdown_requested_ = true;
         }
     }
 

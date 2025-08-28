@@ -51,11 +51,11 @@ namespace hwyz {
         // 信号处理回调
         static void signal_handler(int signal);
 
-        // 退出请求
-        static volatile sig_atomic_t shutdown_requested_;
-
         // 配置参数
         YAML::Node config_;
+
+        // 退出请求
+        std::atomic<bool> shutdown_requested_{false};
 
     };
 
