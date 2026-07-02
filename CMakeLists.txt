@@ -96,3 +96,25 @@ install(EXPORT HWYZ-targets
         NAMESPACE HWYZ::
         DESTINATION lib/cmake/HWYZ
         )
+
+# 单元测试
+enable_testing()
+
+set(TEST_SOURCES
+        tests/test_config_manager.cpp
+        tests/test_path_resolver.cpp
+        tests/test_config_merger.cpp
+        tests/test_config_validator.cpp
+        )
+
+foreach(TEST_SOURCE ${TEST_SOURCES})
+    get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+    add_executable(${TEST_NAME} ${TEST_SOURCE})
+    target_link_libraries(${TEST_NAME} PRIVATE hwyz yaml-cpp pthread)
+    target_include_directories(${TEST_NAME} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            )
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endforeach()
