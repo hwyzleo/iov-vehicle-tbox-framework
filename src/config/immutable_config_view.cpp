@@ -1,12 +1,11 @@
 #include "immutable_config_view.h"
 #include <sstream>
-#include <stdexcept>
 
 namespace hwyz {
 namespace config {
 
-ImmutableConfigViewImpl::ImmutableConfigViewImpl(const std::string& yamlStr)
-    : m_yamlStr(yamlStr)
+ImmutableConfigViewImpl::ImmutableConfigViewImpl(const YAML::Node& root)
+    : m_yamlStr(YAML::Dump(root))  // 序列化为字符串确保不可变
 {
 }
 
@@ -26,6 +25,7 @@ std::string ImmutableConfigViewImpl::getString(const std::string& key, const std
             return node.as<std::string>();
         }
     } catch (...) {
+        // 忽略异常
     }
     return defaultValue;
 }
@@ -37,6 +37,7 @@ int ImmutableConfigViewImpl::getInt(const std::string& key, int defaultValue) co
             return node.as<int>();
         }
     } catch (...) {
+        // 忽略异常
     }
     return defaultValue;
 }
@@ -48,6 +49,7 @@ double ImmutableConfigViewImpl::getDouble(const std::string& key, double default
             return node.as<double>();
         }
     } catch (...) {
+        // 忽略异常
     }
     return defaultValue;
 }
@@ -59,6 +61,7 @@ bool ImmutableConfigViewImpl::getBool(const std::string& key, bool defaultValue)
             return node.as<bool>();
         }
     } catch (...) {
+        // 忽略异常
     }
     return defaultValue;
 }
@@ -75,6 +78,7 @@ std::vector<std::string> ImmutableConfigViewImpl::getStringList(const std::strin
             }
         }
     } catch (...) {
+        // 忽略异常
     }
     return result;
 }
@@ -83,36 +87,42 @@ std::shared_ptr<const ImmutableConfigView> ImmutableConfigViewImpl::getSection(c
     try {
         YAML::Node node = getNode(key);
         if (node && node.IsMap()) {
-            return std::make_shared<ImmutableConfigViewImpl>(YAML::Dump(node));
+            return std::make_shared<ImmutableConfigViewImpl>(node);
         }
     } catch (...) {
+        // 忽略异常
     }
     return nullptr;
 }
 
 std::vector<std::string> ImmutableConfigViewImpl::getKeys() const {
     std::vector<std::string> keys;
-    try {
-        YAML::Node root = YAML::Load(m_yamlStr);
-        if (root && root.IsMap()) {
-            for (auto it = root.begin(); it != root.end(); ++it) {
-                keys.push_back(it->first.as<std::string>());
-            }
+    YAML::Node root = YAML::Load(m_yamlStr);
+    if (root && root.IsMap()) {
+        for (auto it = root.begin(); it != root.end(); ++it) {
+            keys.push_back(it->first.as<std::string>());
         }
-    } catch (...) {
     }
     return keys;
 }
 
 YAML::Node ImmutableConfigViewImpl::getNode(const std::string& key) const {
+    YAML::Node root = YAML::Load(m_yamlStr);
     std::vector<std::string> parts = splitPath(key);
-    YAML::Node current = YAML::Load(m_yamlStr);
+    YAML::Node current = root;
 
     for (const auto& part : parts) {
-        if (!current || !current.IsMap()) {
+        if (!current) {
             return YAML::Node();
         }
-        current = current[part];
+
+        // For map nodes, access the key
+        if (current.IsMap()) {
+            current = current[part];
+        } else {
+            // For non-map nodes, return null
+            return YAML::Node();
+        }
     }
 
     return current;
