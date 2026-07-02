@@ -75,9 +75,11 @@ public:
         ConfigMerger merger;
         YAML::Node merged = merger.mergeMultiple(layers);
 
-        // 5. 校验
+        // 5. 先序列化合并结果（validator.validate() 可能破坏 YAML::Node 内部引用）
+        std::string mergedStr = YAML::Dump(merged);
+
+        // 6. 校验
         ConfigValidator validator;
-        // 添加基本校验规则（可根据实际需求扩展）
         validator.addRule({"log", ConfigType::kMap, true, "Log configuration"});
 
         ConfigErrorInfo validationError = validator.validate(merged);
@@ -86,8 +88,9 @@ public:
             return m_lastError.code;
         }
 
-        // 6. 创建不可变快照
-        m_snapshot = std::make_shared<ImmutableConfigViewImpl>(merged);
+        // 7. 创建不可变快照（从序列化字符串重建，避免引用问题）
+        YAML::Node mergedCopy = YAML::Load(mergedStr);
+        m_snapshot = std::make_shared<ImmutableConfigViewImpl>(mergedCopy);
         m_loaded = true;
 
         m_lastError = {ConfigError::kOk, "", ""};
