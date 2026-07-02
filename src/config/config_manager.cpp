@@ -4,8 +4,7 @@
 #include "config_validator.h"
 #include "immutable_config_view.h"
 #include <yaml-cpp/yaml.h>
-#include <fstream>
-#include <iostream>
+#include <vector>
 
 namespace hwyz {
 namespace config {
@@ -17,6 +16,10 @@ public:
     ~Impl() = default;
 
     ConfigError load(const std::string& serviceName, const std::string& configRoot) {
+        // 重置状态
+        m_loaded = false;
+        m_snapshot.reset();
+
         // 1. 路径解析
         PathResolver resolver(serviceName, configRoot);
 
