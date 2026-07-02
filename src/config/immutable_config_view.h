@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <mutex>
 
 namespace hwyz {
 namespace config {
@@ -36,9 +35,6 @@ private:
 
     // 不可变的 YAML 根节点
     const YAML::Node m_root;
-
-    // 缓存互斥锁（用于线程安全的缓存访问）
-    mutable std::mutex m_cacheMutex;
 };
 
 } // namespace config
