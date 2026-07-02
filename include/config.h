@@ -35,8 +35,8 @@ public:
     ConfigErrorInfo getLastError() const;
 
 private:
-    ConfigManager() = default;
-    ~ConfigManager() = default;
+    ConfigManager();
+    ~ConfigManager();
     ConfigManager(const ConfigManager&) = delete;
     ConfigManager& operator=(const ConfigManager&) = delete;
 
