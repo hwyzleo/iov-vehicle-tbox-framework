@@ -15,6 +15,7 @@ public:
 
     YAML::Node merge(const YAML::Node& base, const YAML::Node& override);
     YAML::Node mergeMultiple(const std::vector<YAML::Node>& nodes);
+    std::string mergeMultipleToString(const std::vector<YAML::Node>& nodes);
 
 private:
     void mergeMap(YAML::Node& base, const YAML::Node& override);

@@ -12,8 +12,8 @@ namespace config {
 // 不可变配置快照实现
 class ImmutableConfigViewImpl : public ImmutableConfigView {
 public:
-    // 从 YAML 节点构造（深拷贝，确保不可变）
-    explicit ImmutableConfigViewImpl(const YAML::Node& root);
+    // 从 YAML 字符串构造
+    explicit ImmutableConfigViewImpl(const std::string& yamlStr);
     ~ImmutableConfigViewImpl() = default;
 
     // ImmutableConfigView 接口实现
@@ -27,14 +27,14 @@ public:
     std::vector<std::string> getKeys() const override;
 
 private:
-    // 获取节点
+    // 获取节点（每次从字符串重新解析）
     YAML::Node getNode(const std::string& key) const;
 
     // 分割点分路径
     std::vector<std::string> splitPath(const std::string& key) const;
 
-    // 不可变的 YAML 根节点
-    const YAML::Node m_root;
+    // YAML 字符串（不可变数据源）
+    const std::string m_yamlStr;
 };
 
 } // namespace config

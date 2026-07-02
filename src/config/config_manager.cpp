@@ -73,21 +73,21 @@ public:
 
         // 4. 深合并
         ConfigMerger merger;
-        YAML::Node merged = merger.mergeMultiple(layers);
+        std::string mergedYaml = merger.mergeMultipleToString(layers);
 
         // 5. 校验
+        YAML::Node mergedNode = YAML::Load(mergedYaml);
         ConfigValidator validator;
-        // 添加基本校验规则（可根据实际需求扩展）
         validator.addRule({"log", ConfigType::kMap, true, "Log configuration"});
 
-        ConfigErrorInfo validationError = validator.validate(merged);
+        ConfigErrorInfo validationError = validator.validate(mergedNode);
         if (validationError.code != ConfigError::kOk) {
             m_lastError = validationError;
             return m_lastError.code;
         }
 
         // 6. 创建不可变快照
-        m_snapshot = std::make_shared<ImmutableConfigViewImpl>(merged);
+        m_snapshot = std::make_shared<ImmutableConfigViewImpl>(mergedYaml);
         m_loaded = true;
 
         m_lastError = {ConfigError::kOk, "", ""};
