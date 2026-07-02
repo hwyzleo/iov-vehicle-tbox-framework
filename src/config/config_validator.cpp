@@ -1,6 +1,5 @@
 #include "config_validator.h"
 #include <sstream>
-#include <iostream>
 
 namespace hwyz {
 namespace config {
@@ -38,26 +37,6 @@ ConfigErrorInfo ConfigValidator::validate(const YAML::Node& config) const {
 
 void ConfigValidator::clearRules() {
     m_rules.clear();
-}
-
-bool ConfigValidator::nodeExists(const YAML::Node& config, const std::string& path) const {
-    std::vector<std::string> parts = splitPath(path);
-    YAML::Node current = config;
-
-    for (const auto& part : parts) {
-        if (!current || !current.IsMap()) {
-            return false;
-        }
-        
-        // Check if key exists without creating null node
-        if (!current[part]) {
-            return false;
-        }
-        
-        current = current[part];
-    }
-
-    return true;
 }
 
 YAML::Node ConfigValidator::getNode(const YAML::Node& config, const std::string& path) const {

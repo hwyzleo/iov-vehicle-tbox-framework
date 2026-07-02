@@ -4,7 +4,6 @@
 #include <yaml-cpp/yaml.h>
 #include <string>
 #include <vector>
-#include <functional>
 
 namespace hwyz {
 namespace config {
@@ -37,9 +36,6 @@ public:
     void clearRules();
 
 private:
-    // 检查节点是否存在
-    bool nodeExists(const YAML::Node& config, const std::string& path) const;
-
     // 获取节点
     YAML::Node getNode(const YAML::Node& config, const std::string& path) const;
 
