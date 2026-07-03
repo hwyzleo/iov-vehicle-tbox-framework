@@ -22,8 +22,6 @@ public:
 private:
     std::string m_serviceName;
     std::string m_storeRoot;
-
-    std::string normalizePath(const std::string& path) const;
 };
 
 } // namespace store

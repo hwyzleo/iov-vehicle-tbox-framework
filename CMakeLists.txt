@@ -103,6 +103,7 @@ enable_testing()
 set(TEST_SOURCES
         tests/test_config_manager.cpp
         tests/test_path_resolver.cpp
+        tests/test_store_path_resolver.cpp
         tests/test_config_merger.cpp
         tests/test_config_validator.cpp
         )
@@ -116,5 +117,8 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             )
+    if(EXISTS ${LIB_DIR}/yaml-cpp)
+        target_link_directories(${TEST_NAME} PRIVATE ${LIB_DIR}/yaml-cpp)
+    endif()
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()

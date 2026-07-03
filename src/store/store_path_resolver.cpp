@@ -59,13 +59,5 @@ std::string PathResolver::getServiceName() const {
     return m_serviceName;
 }
 
-std::string PathResolver::normalizePath(const std::string& path) const {
-    std::string result = path;
-    while (!result.empty() && result.back() == '/') {
-        result.pop_back();
-    }
-    return result;
-}
-
 } // namespace store
 } // namespace hwyz
