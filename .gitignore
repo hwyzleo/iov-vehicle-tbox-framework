@@ -36,5 +36,6 @@ cmake-build-debug/
 .idea/
 build/
 
+graphify-out
 docs/superpowers
 third_party/
