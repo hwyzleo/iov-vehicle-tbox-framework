@@ -1,6 +1,6 @@
 #pragma once
 
-#include "store_types.h"
+#include <store_types.h>
 #include <functional>
 
 namespace hwyz {
