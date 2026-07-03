@@ -4,7 +4,6 @@
 #include <string>
 #include <mutex>
 #include <map>
-#include <atomic>
 
 namespace hwyz {
 namespace store {
@@ -22,7 +21,7 @@ private:
     const PathResolver& m_pathResolver;
 
     mutable std::mutex m_mutex;
-    std::map<std::string, std::atomic<bool>> m_heldLocks;
+    std::map<std::string, int> m_lockFds;
 
     std::string getLockFilePath(const std::string& key) const;
     bool tryFileLock(const std::string& lockPath, int& fd);

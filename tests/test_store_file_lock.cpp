@@ -1,5 +1,5 @@
-#include "store_file_lock.h"
-#include "store_path_resolver.h"
+#include "store/store_file_lock.h"
+#include "store/store_path_resolver.h"
 #include <cassert>
 #include <iostream>
 #include <thread>

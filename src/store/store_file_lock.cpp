@@ -14,17 +14,16 @@ FileLock::FileLock(const PathResolver& pathResolver)
 }
 
 FileLock::~FileLock() {
-    for (auto& pair : m_heldLocks) {
-        if (pair.second) {
-            release(pair.first);
-        }
+    for (auto& pair : m_lockFds) {
+        releaseFileLock(pair.second);
     }
+    m_lockFds.clear();
 }
 
 bool FileLock::acquire(const std::string& key, uint32_t timeoutMs) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (m_heldLocks[key]) {
+    if (m_lockFds.find(key) != m_lockFds.end()) {
         return true;
     }
 
@@ -47,8 +46,7 @@ bool FileLock::acquire(const std::string& key, uint32_t timeoutMs) {
         }
     }
 
-    m_heldLocks[key] = true;
-    close(fd);
+    m_lockFds[key] = fd;
 
     return true;
 }
@@ -56,23 +54,21 @@ bool FileLock::acquire(const std::string& key, uint32_t timeoutMs) {
 void FileLock::release(const std::string& key) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (!m_heldLocks[key]) {
+    auto it = m_lockFds.find(key);
+    if (it == m_lockFds.end()) {
         return;
     }
 
+    releaseFileLock(it->second);
+    m_lockFds.erase(it);
+
     std::string lockPath = getLockFilePath(key);
     unlink(lockPath.c_str());
-
-    m_heldLocks[key] = false;
 }
 
 bool FileLock::isHeld(const std::string& key) const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_heldLocks.find(key);
-    if (it != m_heldLocks.end()) {
-        return it->second;
-    }
-    return false;
+    return m_lockFds.find(key) != m_lockFds.end();
 }
 
 std::string FileLock::getLockFilePath(const std::string& key) const {

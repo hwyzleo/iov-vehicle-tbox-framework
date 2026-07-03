@@ -107,6 +107,7 @@ set(TEST_SOURCES
         tests/test_store_atomic_writer.cpp
         tests/test_config_merger.cpp
         tests/test_config_validator.cpp
+        tests/test_store_file_lock.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})
