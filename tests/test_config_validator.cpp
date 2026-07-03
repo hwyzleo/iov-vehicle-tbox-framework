@@ -1,4 +1,4 @@
-#include "config_validator.h"
+#include "config/config_validator.h"
 #include <cassert>
 #include <iostream>
 

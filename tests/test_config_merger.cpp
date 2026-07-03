@@ -1,4 +1,4 @@
-#include "config_merger.h"
+#include "config/config_merger.h"
 #include <cassert>
 #include <iostream>
 

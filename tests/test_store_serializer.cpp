@@ -1,4 +1,4 @@
-#include "store_serializer.h"
+#include "store/store_serializer.h"
 #include <cassert>
 #include <iostream>
 #include <string>

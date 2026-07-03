@@ -104,6 +104,7 @@ set(TEST_SOURCES
         tests/test_config_manager.cpp
         tests/test_path_resolver.cpp
         tests/test_store_path_resolver.cpp
+        tests/test_store_serializer.cpp
         tests/test_store_atomic_writer.cpp
         tests/test_config_merger.cpp
         tests/test_config_validator.cpp
