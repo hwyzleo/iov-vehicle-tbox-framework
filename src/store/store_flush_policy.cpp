@@ -19,10 +19,7 @@ void FlushPolicy::markDirty(const std::string& key) {
 void FlushPolicy::clearDirty(const std::string& key) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    auto it = m_dirtyEntries.find(key);
-    if (it != m_dirtyEntries.end()) {
-        it->second.dirty = false;
-    }
+    m_dirtyEntries.erase(key);
 }
 
 bool FlushPolicy::isDirty(const std::string& key) const {
