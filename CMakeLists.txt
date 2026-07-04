@@ -35,8 +35,8 @@ endif ()
 
 # 添加三方库
 if(EXISTS ${LIB_DIR}/yaml-cpp)
-    target_link_directories(hwyz PRIVATE ${LIB_DIR}/yaml-cpp)
-    target_link_libraries(hwyz PRIVATE yaml-cpp)
+    target_link_directories(hwyz PUBLIC ${LIB_DIR}/yaml-cpp)
+    target_link_libraries(hwyz PUBLIC yaml-cpp)
 else()
     message(WARNING "YAML library directory not found: ${LIB_DIR}/yaml-cpp")
 endif()
