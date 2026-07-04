@@ -1,5 +1,7 @@
 #include "path_resolver.h"
 #include <sys/stat.h>
+#include <unistd.h>
+#include <climits>
 
 namespace hwyz {
 namespace config {
@@ -22,7 +24,11 @@ std::string PathResolver::getServicePath() const {
 }
 
 std::string PathResolver::getLocalPath() const {
-    return "./" + m_serviceName + ".yaml";
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) != nullptr) {
+        return std::string(cwd) + "/" + m_serviceName + ".yaml";
+    }
+    return m_serviceName + ".yaml";
 }
 
 bool PathResolver::commonExists() const {

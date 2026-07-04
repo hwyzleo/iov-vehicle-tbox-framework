@@ -112,6 +112,7 @@ set(TEST_SOURCES
         tests/test_store_flush_policy.cpp
         tests/test_store_manager.cpp
         tests/test_store_integration.cpp
+        tests/test_store_configurable_path.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})

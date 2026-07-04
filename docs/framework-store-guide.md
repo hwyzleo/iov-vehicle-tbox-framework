@@ -103,10 +103,36 @@ try {
 
 ## 存储路径
 
-数据存储在 `/var/lib/tbox/<svc>/<key>.dat`
+数据存储在 `<root>/<svc>/<key>.dat`，其中 `<root>` 为持久化根路径，可通过配置公共项 `common.store.root` 指定，默认为 `/var/lib/tbox`。
 
 - 目录权限: 0700
 - 文件权限: 0600
+
+## 从配置中读取持久化根路径
+
+各服务应在启动时先加载配置，从 `common.store.root` 读取持久化根路径，再注入 `Store::open`：
+
+```cpp
+#include "config.h"
+#include "store.h"
+
+// 1. 加载配置
+auto err = CONFIG_MANAGER.load("prov");
+if (err != hwyz::config::ConfigError::kOk) {
+    // 处理错误
+}
+
+// 2. 获取配置快照
+auto cfg = CONFIG_SNAPSHOT;
+
+// 3. 读取持久化根路径（未配置时使用默认值 /var/lib/tbox）
+std::string storeRoot = cfg->getString("common.store.root", "/var/lib/tbox");
+
+// 4. 打开存储，注入根路径
+hwyz::store::Store store = hwyz::store::Store::open("prov", storeRoot);
+```
+
+**注意**：`framework-store` 不依赖 `framework-config`，根路径由服务注入，保持两个组件解耦。
 
 ## 并发安全
 

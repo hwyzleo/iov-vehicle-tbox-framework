@@ -249,7 +249,86 @@ std::string vin = hwyz::Utils::global_read_string(hwyz::VIN);
 
 ---
 
-## 6. Application 生命周期
+## 6. 本地持久化（Store）
+
+`framework-store` 提供原子、掉电安全的本地写盘能力，与配置管理并列，互不复用。
+
+### 6.1 基本用法
+
+```cpp
+#include "store.h"
+
+// 打开存储（使用默认根路径 /var/lib/tbox）
+hwyz::store::Store store = hwyz::store::Store::open("prov");
+
+// 保存数据
+store.save<int>("counter", 42);
+store.save<std::string>("session.id", "abc123");
+
+// 加载数据
+int counter = store.load<int>("counter");
+std::string sessionId = store.loadOr<std::string>("session.id", "default");
+
+// 检查与删除
+if (store.has("counter")) {
+    store.remove("counter");
+}
+```
+
+### 6.2 从配置中读取持久化根路径
+
+各服务应先加载配置，从 `common.store.root` 读取持久化根路径，再注入 `Store::open`：
+
+```cpp
+#include "config.h"
+#include "store.h"
+
+// 1. 加载配置
+auto err = CONFIG_MANAGER.load("prov");
+if (err != hwyz::config::ConfigError::kOk) {
+    // 处理错误
+}
+
+// 2. 获取配置快照
+auto cfg = CONFIG_SNAPSHOT;
+
+// 3. 读取持久化根路径（未配置时使用默认值 /var/lib/tbox）
+std::string storeRoot = cfg->getString("common.store.root", "/var/lib/tbox");
+
+// 4. 打开存储，注入根路径
+hwyz::store::Store store = hwyz::store::Store::open("prov", storeRoot);
+```
+
+**设计说明**：`framework-store` 不依赖 `framework-config`，根路径由服务注入，保持两个组件解耦。
+
+### 6.3 错误处理
+
+```cpp
+try {
+    store.save<int>("key", 42);
+} catch (const hwyz::store::StoreException& e) {
+    auto error = e.getError();
+    switch (error.code) {
+        case hwyz::store::StoreError::kPathUnavailable:
+            // 存储路径不可用
+            break;
+        case hwyz::store::StoreError::kAtomicWriteFailed:
+            // 原子写失败
+            break;
+        case hwyz::store::StoreError::kLockFailed:
+            // 并发锁获取失败
+            break;
+        case hwyz::store::StoreError::kSerializationFailed:
+            // 序列化失败
+            break;
+        case hwyz::store::StoreError::kKeyNotFound:
+            // key不存在
+            break;
+    }
+}
+```
+
+## 7. Application 生命周期
 
 `hwyz::Application` 管理服务进程的完整生命周期：
 
@@ -267,11 +346,12 @@ std::string vin = hwyz::Utils::global_read_string(hwyz::VIN);
 
 ---
 
-## 7. 完整服务示例
+## 8. 完整服务示例
 
 ```cpp
 #include "application.h"
 #include "config.h"
+#include "store.h"
 #include "utils.h"
 #include <iostream>
 
@@ -285,6 +365,13 @@ protected:
             std::cerr << "Config load failed: " << info.message << std::endl;
             return false;
         }
+
+        // 获取配置快照
+        auto cfg = CONFIG_SNAPSHOT;
+
+        // 读取持久化根路径并打开存储
+        std::string storeRoot = cfg->getString("common.store.root", "/var/lib/tbox");
+        store_ = hwyz::store::Store::open("prov", storeRoot);
 
         // 通过全局键值读取 VIN
         std::string vin = hwyz::Utils::global_read_string(hwyz::VIN);
@@ -302,6 +389,11 @@ protected:
 
         std::cout << "Connecting to " << host << ":" << port << std::endl;
 
+        // 使用持久化存储
+        int counter = store_.loadOr<int>("counter", 0);
+        std::cout << "Counter: " << counter << std::endl;
+        store_.save<int>("counter", counter + 1);
+
         // 主循环
         // ...
 
@@ -309,8 +401,13 @@ protected:
     }
 
     void cleanup() override {
+        // 强制刷新持久化数据
+        store_.flush();
         std::cout << "ProvService shutting down" << std::endl;
     }
+
+private:
+    hwyz::store::Store store_;
 };
 
 APPLICATION_ENTRY(ProvService)
