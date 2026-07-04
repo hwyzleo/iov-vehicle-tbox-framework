@@ -35,8 +35,19 @@ endif ()
 
 # 添加三方库
 if(EXISTS ${LIB_DIR}/yaml-cpp)
-    target_link_directories(hwyz PUBLIC ${LIB_DIR}/yaml-cpp)
+    target_link_directories(hwyz PUBLIC $<BUILD_INTERFACE:${LIB_DIR}/yaml-cpp>)
     target_link_libraries(hwyz PUBLIC yaml-cpp)
+
+    # 拷贝 yaml-cpp dylib 到 build 目录
+    file(GLOB YAML_CPP_DYLIBS "${LIB_DIR}/yaml-cpp/*.dylib" "${LIB_DIR}/yaml-cpp/*.so")
+    foreach(YAML_CPP_DYLIB ${YAML_CPP_DYLIBS})
+        add_custom_command(TARGET hwyz POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${YAML_CPP_DYLIB}
+                $<TARGET_FILE_DIR:hwyz>
+                COMMENT "Copying ${YAML_CPP_DYLIB} to build directory"
+                )
+    endforeach()
 else()
     message(WARNING "YAML library directory not found: ${LIB_DIR}/yaml-cpp")
 endif()
@@ -125,7 +136,7 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             )
     if(EXISTS ${LIB_DIR}/yaml-cpp)
-        target_link_directories(${TEST_NAME} PRIVATE ${LIB_DIR}/yaml-cpp)
+        target_link_directories(${TEST_NAME} PRIVATE $<BUILD_INTERFACE:${LIB_DIR}/yaml-cpp>)
     endif()
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()

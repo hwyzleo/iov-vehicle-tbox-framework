@@ -3,8 +3,7 @@ include(CMakeFindDependencyMacro)
 # 版本检查
 include(CMakePackageConfigHelpers)
 
-# 添加依赖项
-find_dependency(yaml-cpp REQUIRED)
+# yaml-cpp 已静态链接到 hwyz，无需单独查找
 
 # 定义库相关的变量
 set(HWYZ_LIBRARIES HWYZ::hwyz)
