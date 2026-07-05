@@ -42,9 +42,15 @@ if(EXISTS ${LIB_DIR}/yaml-cpp)
         INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third_party/include"
     )
     # 使用LINK_FLAGS直接传递链接选项，避免CMake重排
-    set_target_properties(hwyz PROPERTIES
-        LINK_FLAGS "-Wl,--whole-archive ${LIB_DIR}/yaml-cpp/libyaml-cpp.a -Wl,--no-whole-archive"
-    )
+    if(APPLE)
+        set_target_properties(hwyz PROPERTIES
+            LINK_FLAGS "-force_load ${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
+        )
+    else()
+        set_target_properties(hwyz PROPERTIES
+            LINK_FLAGS "-Wl,--whole-archive ${LIB_DIR}/yaml-cpp/libyaml-cpp.a -Wl,--no-whole-archive"
+        )
+    endif()
 
     # 拷贝 yaml-cpp dylib 到 build 目录
     file(GLOB YAML_CPP_DYLIBS "${LIB_DIR}/yaml-cpp/*.dylib" "${LIB_DIR}/yaml-cpp/*.so")
