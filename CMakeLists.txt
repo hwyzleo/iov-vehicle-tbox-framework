@@ -19,7 +19,7 @@ set_target_properties(hwyz PROPERTIES
         )
 
 # 根据不同的环境设置不同的库文件目录
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
     if (APPLE)
         set(LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/lib/arm64-apple-darwin)
     elseif (UNIX AND NOT APPLE)
@@ -35,8 +35,16 @@ endif ()
 
 # 添加三方库
 if(EXISTS ${LIB_DIR}/yaml-cpp)
-    target_link_directories(hwyz PUBLIC $<BUILD_INTERFACE:${LIB_DIR}/yaml-cpp>)
-    target_link_libraries(hwyz PUBLIC yaml-cpp)
+    # 使用IMPORTED静态库提供include路径
+    add_library(yaml-cpp STATIC IMPORTED)
+    set_target_properties(yaml-cpp PROPERTIES
+        IMPORTED_LOCATION "${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third_party/include"
+    )
+    # 使用LINK_FLAGS直接传递链接选项，避免CMake重排
+    set_target_properties(hwyz PROPERTIES
+        LINK_FLAGS "-Wl,--whole-archive ${LIB_DIR}/yaml-cpp/libyaml-cpp.a -Wl,--no-whole-archive"
+    )
 
     # 拷贝 yaml-cpp dylib 到 build 目录
     file(GLOB YAML_CPP_DYLIBS "${LIB_DIR}/yaml-cpp/*.dylib" "${LIB_DIR}/yaml-cpp/*.so")
