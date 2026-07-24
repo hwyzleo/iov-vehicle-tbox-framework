@@ -26,6 +26,10 @@ struct LogErrorInfo {
     LogError code;
     std::string message;
     std::string detail;  // 附加上下文（字段名、配置路径等）
+
+    LogErrorInfo() : code(LogError::kOk) {}
+    LogErrorInfo(LogError c, const std::string& m, const std::string& d = "")
+        : code(c), message(m), detail(d) {}
 };
 
 // 日志异常类
@@ -101,7 +105,11 @@ struct FieldValue {
 struct Field {
     std::string key;
     FieldValue value;
-    Sensitivity sensitivity = Sensitivity::Normal;
+    Sensitivity sensitivity;
+
+    Field() : sensitivity(Sensitivity::Normal) {}
+    Field(const std::string& k, const FieldValue& v, Sensitivity s = Sensitivity::Normal)
+        : key(k), value(v), sensitivity(s) {}
 };
 
 // ============================================================
@@ -155,8 +163,11 @@ struct LogConfig {
 // 初始化结果
 // ============================================================
 struct InitResult {
-    LogError error = LogError::kOk;
+    LogError error;
     std::string error_message;
+
+    InitResult() : error(LogError::kOk) {}
+    InitResult(LogError e, const std::string& msg = "") : error(e), error_message(msg) {}
 };
 
 } // namespace log
