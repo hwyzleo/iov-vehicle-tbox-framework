@@ -3,8 +3,8 @@ exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 
-Name: hwyz
-Description: HWYZ Framework Library
+Name: tbox-framework
+Description: TBox Framework Library
 Version: @PROJECT_VERSION@
-Libs: -L${libdir} -lhwyz
+Libs: -L${libdir} -ltbox-framework
 Cflags: -I${includedir}

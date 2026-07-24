@@ -6,7 +6,7 @@
 
 ## 1. 概述
 
-`iov-vehicle-tbox-framework` 是 TBOX 车端基础框架库（`libhwyz`），提供以下核心能力：
+`iov-vehicle-tbox-framework` 是 TBOX 车端基础框架库（`libtbox-framework`），提供以下核心能力：
 
 | 模块 | 头文件 | 说明 |
 |------|--------|------|
@@ -24,14 +24,14 @@
 在服务的 `CMakeLists.txt` 中：
 
 ```cmake
-find_package(HWYZ REQUIRED)
-target_link_libraries(your_service PRIVATE HWYZ::hwyz)
+find_package(TBoxFramework REQUIRED)
+target_link_libraries(your_service PRIVATE TBoxFramework::tbox-framework)
 ```
 
 ### 2.2 pkg-config 方式
 
 ```bash
-g++ main.cpp $(pkg-config --cflags --libs hwyz) -o your_service
+g++ main.cpp $(pkg-config --cflags --libs tbox-framework) -o your_service
 ```
 
 ### 2.3 依赖项
