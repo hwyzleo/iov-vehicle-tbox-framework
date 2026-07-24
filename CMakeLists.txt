@@ -138,6 +138,14 @@ set(TEST_SOURCES
         tests/test_store_manager.cpp
         tests/test_store_integration.cpp
         tests/test_store_configurable_path.cpp
+        tests/test_log_config_adapter.cpp
+        tests/test_log_enricher.cpp
+        tests/test_log_redactor.cpp
+        tests/test_log_level_filter.cpp
+        tests/test_log_json_formatter.cpp
+        tests/test_log_async_dispatcher.cpp
+        tests/test_log_context_scope.cpp
+        tests/test_log_integration.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})
