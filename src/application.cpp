@@ -4,6 +4,7 @@
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
+#include <unistd.h>
 #include <fstream>
 #include <sstream>
 #include <future>
@@ -115,33 +116,57 @@ namespace hwyz {
         std::cout << "初始化日志成功" << std::endl;
     }
 
-    void Application::setup_signal_handlers() {
-        struct sigaction sa{};
-        sa.sa_handler = signal_handler;
-        sigemptyset(&sa.sa_mask);
-        sa.sa_flags = 0;
+    // 致命的同步故障信号（段错误 / abort）处理函数。
+    // 这类信号是由出错指令同步触发的：如果 handler 只打印然后 return，
+    // 内核会回到出错指令重新执行，立即再次触发同一信号，形成死循环刷屏。
+    // 因此这里记录后必须终止进程，绝不能返回到出错现场。
+    static void fatal_signal_handler(int signal) {
+        char msg[64];
+        int len = snprintf(msg, sizeof(msg), "收到致命信号: %d，进程即将退出\n", signal);
+        write(STDERR_FILENO, msg, len);
+        // 直接终止进程（异步信号安全）。配合 SA_RESETHAND 双重保险，
+        // 即使这里未退出，信号处理也已恢复为默认动作，不会再回到本 handler。
+        _exit(128 + signal);
+    }
 
-        if (sigaction(SIGABRT, &sa, nullptr) == -1) {
-            std::cerr << "注册SIGABRT信号失败" << std::endl;
-        }
+    void Application::setup_signal_handlers() {
+        // 优雅退出信号（SIGINT / SIGTERM）：设置退出标志，交由主循环收尾。
+        struct sigaction sa_graceful{};
+        sa_graceful.sa_handler = signal_handler;
+        sigemptyset(&sa_graceful.sa_mask);
+        sa_graceful.sa_flags = 0;
+
         // Ctrl+C
-        if (sigaction(SIGINT, &sa, nullptr) == -1) {
+        if (sigaction(SIGINT, &sa_graceful, nullptr) == -1) {
             std::cerr << "注册SIGINT信号失败" << std::endl;
         }
         // 终止信号
-        if (sigaction(SIGTERM, &sa, nullptr) == -1) {
+        if (sigaction(SIGTERM, &sa_graceful, nullptr) == -1) {
             std::cerr << "注册SIGTERM信号失败" << std::endl;
         }
+
+        // 致命故障信号（SIGSEGV / SIGABRT）：记录后终止，禁止返回式处理。
+        // SA_RESETHAND：处理一次后自动恢复为默认动作，避免任何形式的死循环。
+        struct sigaction sa_fatal{};
+        sa_fatal.sa_handler = fatal_signal_handler;
+        sigemptyset(&sa_fatal.sa_mask);
+        sa_fatal.sa_flags = SA_RESETHAND;
+
         // 段错误
-        if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
+        if (sigaction(SIGSEGV, &sa_fatal, nullptr) == -1) {
             std::cerr << "注册SIGSEGV信号失败" << std::endl;
+        }
+        // abort
+        if (sigaction(SIGABRT, &sa_fatal, nullptr) == -1) {
+            std::cerr << "注册SIGABRT信号失败" << std::endl;
         }
         std::cout << "设置信号处理成功" << std::endl;
     }
 
+    // 优雅退出信号处理函数：仅设置退出标志，主循环发现后正常收尾。
     void Application::signal_handler(int signal) {
-        char msg[100];
-        int len = snprintf(msg, sizeof(msg), "收到信号: %d\n", signal);
+        char msg[64];
+        int len = snprintf(msg, sizeof(msg), "收到退出信号: %d\n", signal);
         write(STDOUT_FILENO, msg, len);
         if (g_app_instance) {
             g_app_instance->shutdown_requested_ = true;

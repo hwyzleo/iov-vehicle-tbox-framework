@@ -1,0 +1,10 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: tbox-framework
+Description: TBox Framework Library
+Version: 
+Libs: -L${libdir} -ltbox-framework
+Cflags: -I${includedir}
