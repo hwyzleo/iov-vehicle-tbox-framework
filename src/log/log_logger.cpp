@@ -3,6 +3,7 @@
 #include "log_redactor.h"
 #include "log_level_filter.h"
 #include "log_json_formatter.h"
+#include "log_standard_formatter.h"
 #include "log_async_dispatcher.h"
 #include "log_sink_manager.h"
 #include "log_emergency_writer.h"
@@ -57,6 +58,7 @@ public:
         m_redactor.reset(new Redactor(config.redact_config));
         m_levelFilter.reset(new LevelFilter(config));
         m_sinkManager.reset(new SinkManager(config, service));
+        m_useStandardFormat = (config.format == "standard");
 
         if (config.async_config.enabled) {
             auto writer = [this](const std::string& line, bool isError) -> bool {
@@ -78,7 +80,8 @@ public:
         Logger logger;
         logger.m_impl = std::make_shared<Logger::Impl>(
             module, m_enricher.get(), m_redactor.get(),
-            m_levelFilter.get(), m_dispatcher.get(), m_sinkManager.get()
+            m_levelFilter.get(), m_dispatcher.get(), m_sinkManager.get(),
+            m_useStandardFormat
         );
         return logger;
     }
@@ -104,6 +107,7 @@ private:
     std::unique_ptr<LevelFilter> m_levelFilter;
     std::unique_ptr<AsyncDispatcher> m_dispatcher;
     std::unique_ptr<SinkManager> m_sinkManager;
+    bool m_useStandardFormat = true;
 };
 
 // ============================================================
@@ -116,13 +120,15 @@ public:
          Redactor* redactor,
          LevelFilter* levelFilter,
          AsyncDispatcher* dispatcher,
-         SinkManager* sinkManager)
+         SinkManager* sinkManager,
+         bool useStandardFormat)
         : m_module(module)
         , m_enricher(enricher)
         , m_redactor(redactor)
         , m_levelFilter(levelFilter)
         , m_dispatcher(dispatcher)
         , m_sinkManager(sinkManager)
+        , m_useStandardFormat(useStandardFormat)
     {}
 
     void log(LogLevel level, std::string_view event, std::string_view message,
@@ -140,12 +146,18 @@ public:
         );
 
         std::vector<Field> redacted = m_redactor->redact(std::move(enriched));
-        std::string jsonLine = JsonLineFormatter::format(redacted);
+
+        std::string line;
+        if (m_useStandardFormat) {
+            line = StandardFormatter::format(redacted);
+        } else {
+            line = JsonLineFormatter::format(redacted);
+        }
 
         if (m_dispatcher) {
-            m_dispatcher->submit(jsonLine, level);
+            m_dispatcher->submit(line, level);
         } else {
-            m_sinkManager->write(jsonLine, level >= LogLevel::kError);
+            m_sinkManager->write(line, level >= LogLevel::kError);
         }
     }
 
@@ -163,6 +175,7 @@ private:
     LevelFilter* m_levelFilter;
     AsyncDispatcher* m_dispatcher;
     SinkManager* m_sinkManager;
+    bool m_useStandardFormat = true;
 };
 
 // ============================================================
