@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <future>
+#include <vector>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -26,8 +27,8 @@ namespace hwyz {
 
     int Application::run(int argc, char *argv[]) {
         try {
-            // 加载配置文件
-            if (!load_default_config()) {
+            // 通过 ConfigManager 加载配置（多根目录、层层覆盖）
+            if (!load_config()) {
                 std::cerr << "加载配置文件失败" << std::endl;
                 return -1;
             }
@@ -76,6 +77,18 @@ namespace hwyz {
         return config_;
     }
 
+    std::shared_ptr<const config::ImmutableConfigView> Application::getConfigSnapshot() const {
+        return CONFIG_MANAGER.getSnapshot();
+    }
+
+    std::string Application::getServiceName() const {
+        return "tbox";
+    }
+
+    std::vector<std::string> Application::getConfigRoots() const {
+        return {"/etc/tbox/", "./config/"};
+    }
+
     bool Application::initialize() {
         return true;
     }
@@ -83,23 +96,63 @@ namespace hwyz {
     void Application::cleanup() {
     }
 
-    bool Application::load_default_config() {
-        const char *env = std::getenv("ENV");
-        std::string env_str = env ? env : "dev";
-        std::string file_path = "../config/config." + env_str + ".yaml";
-        std::ifstream file(file_path);
-        if (!file.is_open()) {
+    bool Application::load_config() {
+        // 获取子项目的服务名和配置根目录
+        std::string serviceName = getServiceName();
+        std::vector<std::string> configRoots = getConfigRoots();
+
+        // 允许通过环境变量 CONFIG_FILE 指定额外的配置文件（追加到候选列表）
+        // 这保持了与旧方案的兼容性
+        const char *custom_config = std::getenv("CONFIG_FILE");
+        if (custom_config && custom_config[0] != '\0') {
+            // 将自定义配置文件路径作为最高优先级的根目录
+            // 需要提取其目录部分作为 root
+            std::string customPath(custom_config);
+            std::string customDir = "./";
+            auto lastSlash = customPath.find_last_of('/');
+            if (lastSlash != std::string::npos) {
+                customDir = customPath.substr(0, lastSlash + 1);
+            }
+            configRoots.push_back(customDir);
+        }
+
+        // 通过 ConfigManager 加载（多根目录、层层覆盖）
+        auto &cm = CONFIG_MANAGER;
+        auto err = cm.load(serviceName, configRoots);
+
+        if (err != config::ConfigError::kOk) {
+            auto info = cm.getLastError();
+            std::cerr << "加载配置文件失败: " << info.message
+                      << " (路径: " << info.path << ")" << std::endl;
+
+            // 打印已尝试的路径
+            std::cerr << "已尝试以下配置根目录:" << std::endl;
+            for (const auto &root : configRoots) {
+                std::cerr << "  - " << root << std::endl;
+            }
             return false;
         }
-        config_ = YAML::LoadFile(file_path);
-        std::cout << "加载配置文件[" + file_path + "]成功" << std::endl;
+
+        // 桥接：从 ConfigManager 获取合并后的 YAML::Node，用于 getConfig() 向后兼容
+        config_ = cm.toYaml();
+
+        std::cout << "通过 ConfigManager 加载配置成功" << std::endl;
         return true;
     }
 
     void Application::setup_logging() {
-        std::string logger_type = config_["logger"]["type"].as<std::string>();
+        // 兼容 "log" 和 "logger" 两种字段名（ConfigManager 校验使用 "log"）
+        YAML::Node logNode = config_["log"];
+        if (!logNode) {
+            logNode = config_["logger"];
+        }
+        if (!logNode) {
+            std::cerr << "未找到日志配置（log/logger），跳过日志初始化" << std::endl;
+            return;
+        }
+        std::string logger_type = logNode["type"].as<std::string>();
         if (logger_type == "file") {
-            std::string logger_path = config_["logger"]["path"].as<std::string>();
+            std::string logger_path = logNode["path"].as<std::string>();
             auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logger_path, true);
             file_sink->set_level(spdlog::level::debug);
             auto logger = std::make_shared<spdlog::logger>("file_logger", file_sink);

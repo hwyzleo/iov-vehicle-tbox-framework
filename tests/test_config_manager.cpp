@@ -3,6 +3,8 @@
 #include <iostream>
 #include <fstream>
 #include <cstdio>
+#include <unistd.h>
+#include <cstdlib>
 
 using namespace hwyz::config;
 
@@ -58,6 +60,74 @@ server:
     system(("rmdir " + tempDir).c_str());
 
     std::cout << "test_load_basic passed" << std::endl;
+}
+
+void test_load_with_project_layer() {
+    std::string tempDir = "/tmp/test_config_project";
+    std::string commonPath = tempDir + "/common.yaml";
+    std::string serviceDir = tempDir + "/conf.d/";
+    std::string servicePath = serviceDir + "test.yaml";
+    // ./config/ 相对于当前工作目录
+    std::string projectDir = tempDir + "/config/";
+    std::string projectPath = projectDir + "test.yaml";
+
+    system(("mkdir -p " + serviceDir).c_str());
+    system(("mkdir -p " + projectDir).c_str());
+
+    createTempFile(commonPath, R"(
+log:
+  level: info
+server:
+  host: localhost
+  port: 8080
+)");
+
+    createTempFile(servicePath, R"(
+server:
+  port: 9090
+)");
+
+    createTempFile(projectPath, R"(
+log:
+  level: debug
+server:
+  timeout: 30
+)");
+
+    // 切换到 tempDir 作为工作目录，这样 ./config/ 就指向 projectDir
+    char* origDir = getcwd(nullptr, 0);
+    chdir(tempDir.c_str());
+
+    ConfigManager& manager = ConfigManager::instance();
+    ConfigError error = manager.load("test", tempDir);
+
+    assert(error == ConfigError::kOk);
+    assert(manager.isLoaded());
+
+    auto snapshot = manager.getSnapshot();
+    assert(snapshot != nullptr);
+
+    // common 的 log.level = info，被 project 覆盖为 debug
+    assert(snapshot->getString("log.level") == "debug");
+    // service 的 server.port = 9090
+    assert(snapshot->getInt("server.port") == 9090);
+    // project 新增的 server.timeout
+    assert(snapshot->getInt("server.timeout") == 30);
+    // common 的 server.host 保留
+    assert(snapshot->getString("server.host") == "localhost");
+
+    // 恢复目录
+    chdir(origDir);
+    free(origDir);
+
+    removeTempFile(commonPath);
+    removeTempFile(servicePath);
+    removeTempFile(projectPath);
+    system(("rmdir " + serviceDir).c_str());
+    system(("rmdir " + projectDir).c_str());
+    system(("rmdir " + tempDir).c_str());
+
+    std::cout << "test_load_with_project_layer passed" << std::endl;
 }
 
 void test_load_missing_common() {
@@ -124,6 +194,7 @@ database:
 
 int main() {
     test_load_basic();
+    test_load_with_project_layer();
     test_load_missing_common();
     test_snapshot_operations();
     return 0;

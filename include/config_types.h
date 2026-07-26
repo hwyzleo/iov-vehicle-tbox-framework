@@ -26,7 +26,8 @@ enum class ConfigType : uint8_t {
 enum class ConfigLayer : uint8_t {
     kCommon = 0,    // common.yaml（必需）
     kService = 1,   // conf.d/<svc>.yaml（可选）
-    kLocal = 2      // . /<svc>.yaml（可选）
+    kProject = 2,   // ./config/<svc>.yaml（可选，项目级本地覆盖）
+    kLocal = 3      // ./<svc>.yaml（可选，目录级本地覆盖）
 };
 
 // 错误信息结构

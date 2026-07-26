@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config_types.h"
+#include <yaml-cpp/yaml.h>
 #include <string>
 #include <memory>
 #include <functional>
@@ -25,6 +26,12 @@ public:
     ConfigError load(const std::string& serviceName,
                      const std::string& configRoot = "/etc/tbox/");
 
+    // 加载配置（多根目录版本，优先级从低到高：configRoots[0] 最低）
+    // 每个根目录下依次查找 common.yaml、conf.d/<svc>.yaml、<svc>.yaml
+    // 后发现的文件覆盖前面的同名 key
+    ConfigError load(const std::string& serviceName,
+                     const std::vector<std::string>& configRoots);
+
     // 获取不可变配置快照（线程安全）
     std::shared_ptr<const ImmutableConfigView> getSnapshot() const;
 
@@ -33,6 +40,10 @@ public:
 
     // 获取最后错误信息
     ConfigErrorInfo getLastError() const;
+
+    // 获取合并后的 YAML::Node（用于向后兼容，如 Application::getConfig()）
+    // 如果未加载，返回空节点
+    YAML::Node toYaml() const;
 
 private:
     ConfigManager();

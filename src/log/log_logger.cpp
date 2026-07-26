@@ -61,8 +61,8 @@ public:
         m_useStandardFormat = (config.format == "standard");
 
         if (config.async_config.enabled) {
-            auto writer = [this](const std::string& line, bool isError) -> bool {
-                return m_sinkManager->write(line, isError);
+            auto writer = [this](const std::string& line, LogLevel level) -> bool {
+                return m_sinkManager->write(line, level);
             };
             m_dispatcher.reset(new AsyncDispatcher(
                 config.async_config.queue_size,
@@ -157,7 +157,7 @@ public:
         if (m_dispatcher) {
             m_dispatcher->submit(line, level);
         } else {
-            m_sinkManager->write(line, level >= LogLevel::kError);
+            m_sinkManager->write(line, level);
         }
     }
 
