@@ -146,6 +146,7 @@ set(TEST_SOURCES
         tests/test_log_async_dispatcher.cpp
         tests/test_log_context_scope.cpp
         tests/test_log_integration.cpp
+        tests/test_log_standard_formatter.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})
