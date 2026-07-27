@@ -8,7 +8,7 @@ find_dependency(yaml-cpp)
 
 # 定义库相关的变量
 set(TBoxFramework_LIBRARIES TBoxFramework::tbox-framework yaml-cpp::yaml-cpp)
-set(TBoxFramework_INCLUDE_DIRS "@CMAKE_INSTALL_PREFIX@/include")
+set(TBoxFramework_INCLUDE_DIRS "@CMAKE_INSTALL_PREFIX@/include/tbox-framework")
 
 # 包含目标文件
 include("${CMAKE_CURRENT_LIST_DIR}/TBoxFrameworkTargets.cmake")

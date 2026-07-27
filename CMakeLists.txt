@@ -1,9 +1,11 @@
 project(Framework)
 cmake_minimum_required(VERSION 3.10)
 
-# 设置C++标准
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# 设置C++标准（如果未被上层项目设置）
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 # 收集源文件
 file(GLOB_RECURSE FRAMEWORK_SOURCES src/*.cpp)
@@ -35,12 +37,17 @@ endif ()
 
 # 添加三方库
 if(EXISTS ${LIB_DIR}/yaml-cpp)
-    # 使用IMPORTED静态库提供include路径
-    add_library(yaml-cpp STATIC IMPORTED)
-    set_target_properties(yaml-cpp PROPERTIES
-        IMPORTED_LOCATION "${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
-        INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third_party/include"
-    )
+    # 检查 yaml-cpp 目标是否已存在（可能由上层项目通过 find_package 创建）
+    if(TARGET yaml-cpp OR TARGET yaml-cpp::yaml-cpp)
+        message(STATUS "yaml-cpp target already exists, skipping creation")
+    else()
+        # 使用IMPORTED静态库提供include路径
+        add_library(yaml-cpp STATIC IMPORTED)
+        set_target_properties(yaml-cpp PROPERTIES
+            IMPORTED_LOCATION "${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
+            INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third_party/include"
+        )
+    endif()
     # 使用LINK_FLAGS直接传递链接选项，避免CMake重排
     if(APPLE)
         set_target_properties(tbox-framework PROPERTIES
@@ -74,7 +81,7 @@ target_include_directories(tbox-framework
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/tbox-framework>
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         )
@@ -107,11 +114,11 @@ install(TARGETS tbox-framework
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
-        INCLUDES DESTINATION include
+        INCLUDES DESTINATION include/tbox-framework
         )
 
 install(DIRECTORY include/
-        DESTINATION include
+        DESTINATION include/tbox-framework
         FILES_MATCHING PATTERN "*.h"
         )
 
@@ -147,6 +154,11 @@ set(TEST_SOURCES
         tests/test_log_context_scope.cpp
         tests/test_log_integration.cpp
         tests/test_log_standard_formatter.cpp
+        tests/test_ipc_protocol.cpp
+        tests/test_ipc_server.cpp
+        tests/test_ipc_client.cpp
+        tests/test_ipc_integration.cpp
+        tests/test_ipc_compatibility.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})

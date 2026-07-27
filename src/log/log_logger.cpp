@@ -77,6 +77,11 @@ public:
     }
 
     Logger getLogger(const std::string& module) {
+        if (!m_initialized) {
+            // 日志系统未初始化，返回 no-op Logger（m_impl 为空）
+            // Logger 的所有输出方法已有 if (m_impl) 保护，不会崩溃
+            return Logger();
+        }
         Logger logger;
         logger.m_impl = std::make_shared<Logger::Impl>(
             module, m_enricher.get(), m_redactor.get(),
@@ -98,6 +103,16 @@ public:
 
 private:
     LoggerRegistry() = default;
+
+    // 显式析构：在成员按声明逆序销毁之前，先停止异步派发线程并 join。
+    // 否则（静态销毁阶段）m_sinkManager 会先于 m_dispatcher 被销毁，
+    // 而仍在运行的 worker 线程会通过 writer 回调访问已释放的 SinkManager，
+    // 造成对已销毁 sink 的悬垂访问（EXC_BAD_ACCESS）。
+    ~LoggerRegistry() {
+        if (m_dispatcher) {
+            m_dispatcher->stop();
+        }
+    }
 
     std::mutex m_mutex;
     bool m_initialized = false;
