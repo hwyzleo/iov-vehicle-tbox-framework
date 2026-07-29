@@ -27,9 +27,10 @@ void test_load_basic() {
     system(("mkdir -p " + serviceDir).c_str());
 
     createTempFile(commonPath, R"(
-log:
-  level: info
-  format: json
+common:
+  log:
+    level: info
+    format: json
 server:
   host: localhost
   port: 8080
@@ -49,8 +50,8 @@ server:
     auto snapshot = manager.getSnapshot();
     assert(snapshot != nullptr);
 
-    assert(snapshot->getString("log.level") == "info");
-    assert(snapshot->getString("log.format") == "json");
+    assert(snapshot->getString("common.log.level") == "info");
+    assert(snapshot->getString("common.log.format") == "json");
     assert(snapshot->getString("server.host") == "localhost");
     assert(snapshot->getInt("server.port") == 9090);
 
@@ -75,8 +76,9 @@ void test_load_with_project_layer() {
     system(("mkdir -p " + projectDir).c_str());
 
     createTempFile(commonPath, R"(
-log:
-  level: info
+common:
+  log:
+    level: info
 server:
   host: localhost
   port: 8080
@@ -88,8 +90,9 @@ server:
 )");
 
     createTempFile(projectPath, R"(
-log:
-  level: debug
+common:
+  log:
+    level: debug
 server:
   timeout: 30
 )");
@@ -107,8 +110,8 @@ server:
     auto snapshot = manager.getSnapshot();
     assert(snapshot != nullptr);
 
-    // common 的 log.level = info，被 project 覆盖为 debug
-    assert(snapshot->getString("log.level") == "debug");
+    // common 的 common.log.level = info，被 project 覆盖为 debug
+    assert(snapshot->getString("common.log.level") == "debug");
     // service 的 server.port = 9090
     assert(snapshot->getInt("server.port") == 9090);
     // project 新增的 server.timeout
@@ -147,8 +150,9 @@ void test_snapshot_operations() {
     system(("mkdir -p " + tempDir).c_str());
 
     createTempFile(commonPath, R"(
-log:
-  level: info
+common:
+  log:
+    level: info
 app:
   name: test-app
   version: 1.0
@@ -192,9 +196,165 @@ database:
     std::cout << "test_snapshot_operations passed" << std::endl;
 }
 
+void test_load_with_project_common() {
+    std::string tempDir = "/tmp/test_config_proj_common";
+    std::string rootCommonPath = tempDir + "/common.yaml";
+    std::string projectDir = tempDir + "/config/";
+    std::string projectCommonPath = projectDir + "common.yaml";
+
+    system(("mkdir -p " + projectDir).c_str());
+
+    createTempFile(rootCommonPath, R"(
+common:
+  log:
+    level: info
+server:
+  host: root-host
+)");
+
+    createTempFile(projectCommonPath, R"(
+common:
+  log:
+    level: debug
+server:
+  timeout: 30
+)");
+
+    // 切换到 tempDir，使 ./config/common.yaml 指向 projectCommonPath
+    char* origDir = getcwd(nullptr, 0);
+    chdir(tempDir.c_str());
+
+    ConfigManager& manager = ConfigManager::instance();
+    ConfigError error = manager.load("test", tempDir);
+
+    assert(error == ConfigError::kOk);
+    assert(manager.isLoaded());
+
+    auto snapshot = manager.getSnapshot();
+    assert(snapshot != nullptr);
+
+    // project common 覆盖 root common 的 common.log.level
+    assert(snapshot->getString("common.log.level") == "debug");
+    // root common 的 server.host 保留（project common 未覆盖）
+    assert(snapshot->getString("server.host") == "root-host");
+    // project common 新增的 server.timeout
+    assert(snapshot->getInt("server.timeout") == 30);
+
+    chdir(origDir);
+    free(origDir);
+
+    removeTempFile(rootCommonPath);
+    removeTempFile(projectCommonPath);
+    system(("rmdir " + projectDir).c_str());
+    system(("rmdir " + tempDir).c_str());
+
+    std::cout << "test_load_with_project_common passed" << std::endl;
+}
+
+void test_load_project_common_only() {
+    // 没有 root common，仅存在 ./config/common.yaml，应当加载成功
+    std::string tempDir = "/tmp/test_config_proj_common_only";
+    std::string projectDir = tempDir + "/config/";
+    std::string projectCommonPath = projectDir + "common.yaml";
+
+    system(("mkdir -p " + projectDir).c_str());
+
+    // 注意：不创建 tempDir/common.yaml
+    createTempFile(projectCommonPath, R"(
+common:
+  log:
+    level: warn
+)");
+
+    char* origDir = getcwd(nullptr, 0);
+    chdir(tempDir.c_str());
+
+    ConfigManager& manager = ConfigManager::instance();
+    ConfigError error = manager.load("test", tempDir);
+
+    assert(error == ConfigError::kOk);
+    assert(manager.isLoaded());
+
+    auto snapshot = manager.getSnapshot();
+    assert(snapshot != nullptr);
+    assert(snapshot->getString("common.log.level") == "warn");
+
+    chdir(origDir);
+    free(origDir);
+
+    removeTempFile(projectCommonPath);
+    system(("rmdir " + projectDir).c_str());
+    system(("rmdir " + tempDir).c_str());
+
+    std::cout << "test_load_project_common_only passed" << std::endl;
+}
+
+void test_load_with_common_log() {
+    // 规范位置：日志配置位于 common.log
+    std::string tempDir = "/tmp/test_config_common_log";
+    std::string commonPath = tempDir + "/common.yaml";
+
+    system(("mkdir -p " + tempDir).c_str());
+
+    createTempFile(commonPath, R"(
+common:
+  log:
+    level: debug
+    file: /var/log/tbox/test.log
+  store:
+    root: /var/tbox
+)");
+
+    ConfigManager& manager = ConfigManager::instance();
+    ConfigError error = manager.load("test", tempDir);
+
+    assert(error == ConfigError::kOk);
+    assert(manager.isLoaded());
+
+    auto snapshot = manager.getSnapshot();
+    assert(snapshot != nullptr);
+    assert(snapshot->getString("common.log.level") == "debug");
+    assert(snapshot->getString("common.store.root") == "/var/tbox");
+
+    removeTempFile(commonPath);
+    system(("rmdir " + tempDir).c_str());
+
+    std::cout << "test_load_with_common_log passed" << std::endl;
+}
+
+void test_load_missing_log_config() {
+    // common.log 与顶层 log 都不存在时，校验必须失败
+    std::string tempDir = "/tmp/test_config_no_log";
+    std::string commonPath = tempDir + "/common.yaml";
+
+    system(("mkdir -p " + tempDir).c_str());
+
+    createTempFile(commonPath, R"(
+common:
+  store:
+    root: /var/tbox
+)");
+
+    ConfigManager& manager = ConfigManager::instance();
+    ConfigError error = manager.load("test", tempDir);
+
+    assert(error == ConfigError::kValidationFailed);
+    assert(!manager.isLoaded());
+    assert(manager.getLastError().path == "common.log");
+
+    removeTempFile(commonPath);
+    system(("rmdir " + tempDir).c_str());
+
+    std::cout << "test_load_missing_log_config passed" << std::endl;
+}
+
 int main() {
     test_load_basic();
     test_load_with_project_layer();
+    test_load_with_project_common();
+    test_load_project_common_only();
+    test_load_with_common_log();
+    test_load_missing_log_config();
     test_load_missing_common();
     test_snapshot_operations();
     return 0;

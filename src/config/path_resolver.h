@@ -38,7 +38,8 @@ public:
     std::string getConfigRoot() const;
 
     // 多根目录 API：按优先级从低到高返回所有已存在的配置文件
-    // 优先级：common < conf.d/svc < roots[0]/svc < roots[1]/svc < ...
+    // 优先级：common < project/common < conf.d/svc < project/svc < roots[i]/svc < local/svc
+    // 其中 common 与 project/common 至少需存在一个（project/common 覆盖 common）
     std::vector<ConfigEntry> resolveAll() const;
 
 private:

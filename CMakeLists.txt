@@ -73,7 +73,11 @@ else()
     message(WARNING "YAML library directory not found: ${LIB_DIR}/yaml-cpp")
 endif()
 find_package(OpenSSL REQUIRED)
-target_include_directories(tbox-framework PUBLIC ${OPENSSL_INCLUDE_DIR})
+# OpenSSL 仅供 framework 内部实现使用（include/ 下无任何公共头文件引用 openssl）。
+# 必须是 PRIVATE：否则 ${OPENSSL_INCLUDE_DIR} 的绝对路径会被写进导出的
+# INTERFACE_INCLUDE_DIRECTORIES，使安装包绑死在构建机的 brew 路径上，
+# 交叉编译与生产部署都会引用到不存在的目录。
+target_include_directories(tbox-framework PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(tbox-framework PRIVATE ${OPENSSL_LIBRARIES})
 
 # 设置包含目录
@@ -118,6 +122,21 @@ install(TARGETS tbox-framework
         )
 
 install(DIRECTORY include/
+        DESTINATION include/tbox-framework
+        FILES_MATCHING PATTERN "*.h"
+        )
+
+# 自包含 yaml-cpp / spdlog：framework 的公共头文件与实现依赖这两者，
+# yaml-cpp 的静态库已被 force_load/whole-archive 进 libtbox-framework（符号对外可见），
+# spdlog 为 header-only 且自带 bundled fmt，无需外部 fmt 包。
+# 全部装到 include/tbox-framework/ 下，正好被已有的 INSTALL_INTERFACE 包含路径覆盖，
+# 消费方因此不会再意外命中构建机上的 brew / conda 副本（版本漂移的根源）。
+install(DIRECTORY third_party/include/yaml-cpp
+        DESTINATION include/tbox-framework
+        FILES_MATCHING PATTERN "*.h"
+        )
+
+install(DIRECTORY third_party/include/spdlog
         DESTINATION include/tbox-framework
         FILES_MATCHING PATTERN "*.h"
         )

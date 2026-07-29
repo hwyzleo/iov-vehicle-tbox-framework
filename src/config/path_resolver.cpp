@@ -64,26 +64,32 @@ std::pair<std::string, int> PathResolver::findService() const {
 std::vector<ConfigEntry> PathResolver::resolveAll() const {
     std::vector<ConfigEntry> entries;
 
-    // 1. common.yaml：在所有根目录中查找，只取第一个存在的（必需层）
+    // 1. common.yaml（root 层）：在所有根目录中查找，只取第一个存在的
     std::pair<std::string, int> commonResult = findCommon();
     if (!commonResult.first.empty()) {
         entries.push_back({commonResult.first, "common"});
     }
 
-    // 2. conf.d/<svc>.yaml：在所有根目录中查找，只取第一个存在的
+    // 2. ./config/common.yaml（项目层 common，覆盖 root common）
+    std::string projectCommonPath = "./config/common.yaml";
+    if (fileExists(projectCommonPath)) {
+        entries.push_back({projectCommonPath, "project/common"});
+    }
+
+    // 3. conf.d/<svc>.yaml：在所有根目录中查找，只取第一个存在的
     std::pair<std::string, int> serviceResult = findService();
     if (!serviceResult.first.empty()) {
         entries.push_back({serviceResult.first, "conf.d/" + m_serviceName});
     }
 
-    // 3. ./config/<svc>.yaml（项目级覆盖，相对于当前工作目录）
+    // 4. ./config/<svc>.yaml（项目级覆盖，相对于当前工作目录）
     //    这是旧 PathResolver.getProjectPath() 的行为，保持向后兼容
     std::string projectPath = "./config/" + m_serviceName + ".yaml";
     if (fileExists(projectPath)) {
         entries.push_back({projectPath, "project/" + m_serviceName});
     }
 
-    // 4. 每个根目录下的 <svc>.yaml（目录级覆盖）
+    // 5. 每个根目录下的 <svc>.yaml（目录级覆盖）
     for (int i = 0; i < static_cast<int>(m_configRoots.size()); ++i) {
         std::string path = m_configRoots[i] + m_serviceName + ".yaml";
         if (fileExists(path)) {
@@ -91,7 +97,7 @@ std::vector<ConfigEntry> PathResolver::resolveAll() const {
         }
     }
 
-    // 5. ./<svc>.yaml（目录级本地覆盖，最高优先）
+    // 6. ./<svc>.yaml（目录级本地覆盖，最高优先）
     std::string localPath = "./" + m_serviceName + ".yaml";
     if (fileExists(localPath)) {
         entries.push_back({localPath, "local/" + m_serviceName});

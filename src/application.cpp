@@ -141,13 +141,13 @@ namespace hwyz {
     }
 
     void Application::setup_logging() {
-        // 兼容 "log" 和 "logger" 两种字段名（ConfigManager 校验使用 "log"）
-        YAML::Node logNode = config_["log"];
+        // 日志配置的规范位置是 common.log；"logger" 是 Application 早期的字段名
+        YAML::Node logNode = config_["common"] ? config_["common"]["log"] : YAML::Node();
         if (!logNode) {
             logNode = config_["logger"];
         }
         if (!logNode) {
-            std::cerr << "未找到日志配置（log/logger），跳过日志初始化" << std::endl;
+            std::cerr << "未找到日志配置（common.log/logger），跳过日志初始化" << std::endl;
             return;
         }
         std::string logger_type = logNode["type"].as<std::string>();

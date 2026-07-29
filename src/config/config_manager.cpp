@@ -62,17 +62,17 @@ private:
         // 2. 按优先级收集所有存在的配置文件
         std::vector<ConfigEntry> entries = resolver.resolveAll();
 
-        // 3. common.yaml 必须存在
+        // 3. common.yaml（root 层）与 ./config/common.yaml（项目层）至少存在一个
         bool hasCommon = false;
         for (const auto& entry : entries) {
-            if (entry.layer == "common") {
+            if (entry.layer == "common" || entry.layer == "project/common") {
                 hasCommon = true;
                 break;
             }
         }
         if (!hasCommon) {
             m_lastError = {ConfigError::kFileNotFound,
-                          "Required config file not found: common.yaml in any config root",
+                          "Required config file not found: common.yaml (root) or ./config/common.yaml (project)",
                           "common.yaml"};
             return m_lastError.code;
         }
@@ -98,11 +98,15 @@ private:
         // 6. 先序列化合并结果（validator.validate() 可能破坏 YAML::Node 内部引用）
         std::string mergedStr = YAML::Dump(merged);
 
-        // 7. 校验
+        // 7. 校验：日志配置必须位于 common.log
+        //    （公共配置统一收敛到 common 命名空间下，见各服务 common.yaml）
+        //    注意：ConfigValidator 内部按路径逐级取节点，会在缺失的键上留下
+        //    zombie 节点，故校验用 mergedStr 重建一份独立的 Node。
         ConfigValidator validator;
-        validator.addRule({"log", ConfigType::kMap, true, "Log configuration"});
+        validator.addRule({"common.log", ConfigType::kMap, true, "Log configuration (common.log)"});
 
-        ConfigErrorInfo validationError = validator.validate(merged);
+        YAML::Node validateNode = YAML::Load(mergedStr);
+        ConfigErrorInfo validationError = validator.validate(validateNode);
         if (validationError.code != ConfigError::kOk) {
             m_lastError = validationError;
             return m_lastError.code;
