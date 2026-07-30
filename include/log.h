@@ -22,6 +22,15 @@ public:
     // 获取指定模块的 Logger 实例
     static Logger get(const std::string& module);
 
+    // 关闭日志系统（停止异步线程、释放资源），重置为未初始化状态。
+    // 用于进程退出前的优雅清理与测试间重置；调用后可重新 init。
+    static void shutdown();
+
+    // 将已格式化的整行直接转发到 framework-log 的统一 sink（不经 enricher/redactor）。
+    // 供 spdlog 兼容 adapter 等桥接层使用，使遗留日志进入同一 sink，避免产生第二套 sink。
+    // 未初始化时降级写入 stderr。
+    static void forwardRaw(const std::string& line, LogLevel level);
+
     // 日志输出方法
     void trace(std::string_view event, std::string_view message,
                std::initializer_list<Field> fields = {});

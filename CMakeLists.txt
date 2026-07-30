@@ -185,6 +185,10 @@ set(TEST_SOURCES
         tests/test_ipc_compatibility.cpp
         tests/test_sha256.cpp
         tests/test_sha256_cross_platform.cpp
+        tests/test_application_log.cpp
+        tests/test_application_signals.cpp
+        tests/test_application_shutdown.cpp
+        tests/test_application_integration.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})

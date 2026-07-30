@@ -70,6 +70,9 @@ public:
                 std::move(writer)
             ));
             m_dispatcher->start();
+        } else {
+            // 显式清空，避免 shutdown 后重 init 残留已停止的 dispatcher 吞掉日志。
+            m_dispatcher.reset();
         }
 
         m_initialized = true;
@@ -92,6 +95,21 @@ public:
     }
 
     bool isInitialized() const { return m_initialized; }
+
+    void forwardRaw(const std::string& line, LogLevel level) {
+        // 未初始化时降级到 stderr，保证桥接日志不丢。
+        if (!m_initialized) {
+            std::string fallback = line + "\n";
+            fwrite(fallback.c_str(), 1, fallback.size(), stderr);
+            return;
+        }
+        // 与正常日志路径一致：有异步队列则入队，否则直接写 sink。
+        if (m_dispatcher) {
+            m_dispatcher->submit(line, level);
+        } else if (m_sinkManager) {
+            m_sinkManager->write(line, level);
+        }
+    }
 
     void shutdown() {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -243,6 +261,14 @@ void Logger::fatal(std::string_view event, std::string_view message,
 
 void Logger::flush() {
     if (m_impl) m_impl->flush();
+}
+
+void Logger::shutdown() {
+    LoggerRegistry::instance().shutdown();
+}
+
+void Logger::forwardRaw(const std::string& line, LogLevel level) {
+    LoggerRegistry::instance().forwardRaw(line, level);
 }
 
 } // namespace log
