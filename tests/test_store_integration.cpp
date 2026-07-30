@@ -59,9 +59,34 @@ void test_power_loss_simulation() {
     store.cleanup();
 }
 
+// 回归测试：空字符串是合法值，save/load 必须成功，
+// 不能因序列化结果为空而抛出 kSerializationFailed。
+void test_empty_string_round_trip() {
+    Store store = Store::open("empty_string_test", "/tmp/tbox_empty_string_test");
+
+    // save 空字符串不应抛异常
+    bool threw = false;
+    try {
+        store.save<std::string>("last_error", "");
+    } catch (const StoreException&) {
+        threw = true;
+    }
+    assert(!threw);
+
+    // 读回应为对应的空字符串
+    assert(store.has("last_error"));
+    assert(store.load<std::string>("last_error") == "");
+
+    // loadOr 命中已存在的空值时应返回空字符串，而非默认值
+    assert(store.loadOr<std::string>("last_error", "fallback") == "");
+
+    store.cleanup();
+}
+
 int main() {
     test_concurrent_save_load();
     test_power_loss_simulation();
+    test_empty_string_round_trip();
     std::cout << "All integration tests passed!" << std::endl;
     return 0;
 }

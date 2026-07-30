@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <cstdio>
 #include <unistd.h>
+#include <type_traits>
 
 namespace hwyz {
 namespace store {
@@ -38,7 +39,9 @@ public:
         }
 
         std::string bytes = m_serializer.serialize(value);
-        if (bytes.empty()) {
+        // 空字符串是 std::string 的合法值（例如空的 last_error），不应视为序列化失败。
+        // 仅对非字符串类型，空结果才代表真正的序列化异常。
+        if (bytes.empty() && !std::is_same<T, std::string>::value) {
             m_fileLock.release(key);
             throw StoreException(StoreError::kSerializationFailed,
                                  "Failed to serialize value", key);
