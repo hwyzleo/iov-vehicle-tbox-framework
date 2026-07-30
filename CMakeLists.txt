@@ -20,6 +20,11 @@ set_target_properties(tbox-framework PROPERTIES
         LINKER_LANGUAGE CXX
         )
 
+# CR-006 (framework-hash): hash 模块源文件编译启用 -Wall -Wextra -Werror。
+# 仅作用于 hash 源文件，不全局启用以避免既有模块预存告警阻断构建。
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/hash/sha256.cpp
+        PROPERTIES COMPILE_FLAGS "-Wall -Wextra -Werror")
+
 # 根据不同的环境设置不同的库文件目录
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
     if (APPLE)
@@ -178,11 +183,17 @@ set(TEST_SOURCES
         tests/test_ipc_client.cpp
         tests/test_ipc_integration.cpp
         tests/test_ipc_compatibility.cpp
+        tests/test_sha256.cpp
+        tests/test_sha256_cross_platform.cpp
         )
 
 foreach(TEST_SOURCE ${TEST_SOURCES})
     get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_SOURCE})
+    # CR-006: hash 测试启用 -Wall -Wextra -Werror
+    if(${TEST_NAME} MATCHES "sha256")
+        target_compile_options(${TEST_NAME} PRIVATE -Wall -Wextra -Werror)
+    endif()
     target_link_libraries(${TEST_NAME} PRIVATE tbox-framework yaml-cpp pthread)
     target_include_directories(${TEST_NAME} PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
