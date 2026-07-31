@@ -283,6 +283,170 @@ void test_multiple_subscriptions() {
 }
 
 // ============================================================
+// 9. Subscribe with params - new overload sends params in handshake
+// ============================================================
+void test_subscribe_with_params() {
+    Server server(TEST_SOCKET);
+    std::string captured_params;
+    std::atomic<int> captured_fd{-1};
+    std::atomic<int> handler_count{0};
+
+    auto handler = [&](uint32_t method_id, std::string_view params, int client_fd) -> std::string {
+        if (method_id == 10) {
+            captured_params = std::string(params);
+            captured_fd.store(client_fd);
+            handler_count.fetch_add(1);
+        }
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    Client client(TEST_SOCKET);
+    Subscription sub = client.subscribe(10, 200, R"({"owner":"tsp"})",
+        [](uint32_t, std::string_view) {});
+
+    for (int i = 0; i < 50; i++) {
+        if (handler_count.load() > 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    assert(handler_count.load() > 0);
+    assert(captured_params == R"({"owner":"tsp"})");
+    assert(captured_fd.load() >= 0);
+
+    sub.cancel();
+    server.stop();
+    std::cout << "  [PASS] test_subscribe_with_params" << std::endl;
+}
+
+// ============================================================
+// 10. Subscribe params ownership - params copied, not referenced
+// ============================================================
+void test_subscribe_params_ownership() {
+    Server server(TEST_SOCKET);
+    std::string captured_params;
+    std::atomic<int> handler_count{0};
+
+    auto handler = [&](uint32_t method_id, std::string_view params, int) -> std::string {
+        if (method_id == 10) {
+            captured_params = std::string(params);
+            handler_count.fetch_add(1);
+        }
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    Client client(TEST_SOCKET);
+    Subscription sub;
+    {
+        // params created in a temporary scope, destroyed after subscribe returns
+        std::string temp_params = R"({"owner":"tsp","route":"downlink"})";
+        sub = client.subscribe(10, 200, std::string_view(temp_params),
+            [](uint32_t, std::string_view) {});
+    }
+    // temp_params destroyed; Subscription::Impl holds owned copy
+
+    for (int i = 0; i < 50; i++) {
+        if (handler_count.load() > 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    assert(handler_count.load() > 0);
+    assert(captured_params == R"({"owner":"tsp","route":"downlink"})");
+
+    sub.cancel();
+    server.stop();
+    std::cout << "  [PASS] test_subscribe_params_ownership" << std::endl;
+}
+
+// ============================================================
+// 11. Subscribe params reconnect - resends same params on reconnect
+// ============================================================
+void test_subscribe_params_reconnect() {
+    const char* sock = "/tmp/tbox-test-ipc-sub-reconnect.sock";
+
+    std::string captured_params;
+    std::atomic<int> connect_count{0};
+
+    auto handler = [&captured_params, &connect_count](uint32_t method_id, std::string_view params, int) -> std::string {
+        if (method_id == 10) {
+            captured_params = std::string(params);
+            connect_count.fetch_add(1);
+        }
+        return "{}";
+    };
+
+    Server server(sock);
+    assert(server.start(handler));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    {
+        Client client(sock);
+        Subscription sub = client.subscribe(10, 200, R"({"owner":"tsp"})",
+            [](uint32_t, std::string_view) {});
+
+        // Wait for first connection
+        for (int i = 0; i < 50; i++) {
+            if (connect_count.load() >= 1) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        assert(connect_count.load() >= 1);
+        assert(captured_params == R"({"owner":"tsp"})");
+
+        // Stop server to break the subscription connection
+        server.stop();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        // Restart server - client auto-reconnects and resends params
+        assert(server.start(handler));
+
+        // Wait for reconnect
+        for (int i = 0; i < 100; i++) {
+            if (connect_count.load() >= 2) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        assert(connect_count.load() >= 2);
+        assert(captured_params == R"({"owner":"tsp"})");
+
+        sub.cancel();
+    }
+
+    server.stop();
+    unlink(sock);
+    std::cout << "  [PASS] test_subscribe_params_reconnect" << std::endl;
+}
+
+// ============================================================
+// 12. Old subscribe overload sends empty params (regression)
+// ============================================================
+void test_subscribe_old_overload_empty_params() {
+    Server server(TEST_SOCKET);
+    std::string captured_params;
+    std::atomic<int> handler_count{0};
+
+    auto handler = [&](uint32_t method_id, std::string_view params, int) -> std::string {
+        if (method_id == 10) {
+            captured_params = std::string(params);
+            handler_count.fetch_add(1);
+        }
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    Client client(TEST_SOCKET);
+    Subscription sub = client.subscribe(10, 200, [](uint32_t, std::string_view) {});
+
+    for (int i = 0; i < 50; i++) {
+        if (handler_count.load() > 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    assert(handler_count.load() > 0);
+    assert(captured_params == "");
+
+    sub.cancel();
+    server.stop();
+    std::cout << "  [PASS] test_subscribe_old_overload_empty_params" << std::endl;
+}
+
+// ============================================================
 // Main
 // ============================================================
 int main() {
@@ -298,6 +462,10 @@ int main() {
     test_subscribe_receives_events();
     test_subscription_raii();
     test_multiple_subscriptions();
+    test_subscribe_with_params();
+    test_subscribe_params_ownership();
+    test_subscribe_params_reconnect();
+    test_subscribe_old_overload_empty_params();
 
     unlink(TEST_SOCKET);
 

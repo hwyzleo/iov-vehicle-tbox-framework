@@ -34,6 +34,11 @@ public:
     // 向已订阅 event_type 的连接推送 Event 帧。
     bool push_event(uint32_t event_type, std::string_view payload_json);
 
+    // 向指定 client_fd 定向推送一帧 Event（仅当该 fd 已订阅 event_type）。
+    // fd 不存在、已断开、未订阅或写入失败时返回 false，不影响其他连接。
+    bool push_event_to(int client_fd, uint32_t event_type,
+                       std::string_view payload_json);
+
     // 管理 per-client_fd 订阅集合。
     bool add_subscription(int client_fd, uint32_t event_type);
     bool remove_subscription(int client_fd, uint32_t event_type);
@@ -102,6 +107,13 @@ public:
     // 传输失败后不重放请求，调用方需将结果视为 unknown outcome。
     std::pair<int32_t, std::string> callOnce(
         uint32_t method_id, std::string_view params_json);
+
+    // 订阅事件（带握手 params）。每次订阅建立独立连接，完成 Response 握手后进入 event-only。
+    // params_json 在握手 Request 中发送，并在断线重连时自动重发同一 params。
+    // 返回 RAII Subscription 句柄，析构时自动取消。
+    Subscription subscribe(uint32_t method_id, uint32_t event_type,
+                           std::string_view params_json,
+                           EventCallback callback);
 
     // 订阅事件。每次订阅建立独立连接，完成 Response 握手后进入 event-only。
     // 返回 RAII Subscription 句柄，析构时自动取消。

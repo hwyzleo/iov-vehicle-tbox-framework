@@ -86,11 +86,13 @@ static std::pair<int32_t, std::string> makeTransportError(IpcError err) {
 class Subscription::Impl {
 public:
     Impl(const std::string& socket_path, const IpcConfig& config,
-         uint32_t method_id, uint32_t event_type, EventCallback callback)
+         uint32_t method_id, uint32_t event_type,
+         std::string params, EventCallback callback)
         : m_socketPath(socket_path)
         , m_config(config)
         , m_methodId(method_id)
         , m_eventType(event_type)
+        , m_params(std::move(params))
         , m_callback(std::move(callback)) {
     }
 
@@ -194,9 +196,8 @@ private:
         tv.tv_usec = static_cast<suseconds_t>((m_config.receive_timeout_ms % 1000) * 1000);
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        // Send subscribe Request
-        std::string empty_params = "";
-        if (!Protocol::writeRequest(fd, m_methodId, empty_params)) {
+        // Send subscribe Request (m_params carried on every connect/reconnect)
+        if (!Protocol::writeRequest(fd, m_methodId, m_params)) {
             close(fd);
             return -1;
         }
@@ -244,6 +245,7 @@ private:
     IpcConfig m_config;
     uint32_t m_methodId;
     uint32_t m_eventType;
+    std::string m_params;
     EventCallback m_callback;
 
     std::atomic<bool> m_active{true};
@@ -407,9 +409,10 @@ public:
     }
 
     Subscription subscribe(uint32_t method_id, uint32_t event_type,
-                           EventCallback callback) {
+                           std::string params, EventCallback callback) {
         auto impl = std::make_shared<Subscription::Impl>(
-            m_socketPath, m_config, method_id, event_type, std::move(callback));
+            m_socketPath, m_config, method_id, event_type,
+            std::move(params), std::move(callback));
         {
             std::lock_guard<std::mutex> lock(m_subMutex);
             m_subscriptions.push_back(impl);
@@ -558,8 +561,16 @@ std::pair<int32_t, std::string> Client::callOnce(
 }
 
 Subscription Client::subscribe(uint32_t method_id, uint32_t event_type,
+                                std::string_view params_json,
                                 EventCallback callback) {
-    return m_impl->subscribe(method_id, event_type, std::move(callback));
+    return m_impl->subscribe(method_id, event_type,
+                             std::string(params_json), std::move(callback));
+}
+
+Subscription Client::subscribe(uint32_t method_id, uint32_t event_type,
+                                EventCallback callback) {
+    return m_impl->subscribe(method_id, event_type,
+                             std::string{}, std::move(callback));
 }
 
 } // namespace ipc

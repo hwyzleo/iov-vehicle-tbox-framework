@@ -212,6 +212,25 @@ public:
         return any_sent;
     }
 
+    bool pushEventTo(int client_fd, uint32_t event_type,
+                     const std::string& payload_json) {
+        std::shared_ptr<ClientState> state;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_clients.find(client_fd);
+            if (it == m_clients.end()) {
+                return false;
+            }
+            if (it->second->subscriptions.count(event_type) == 0) {
+                return false;
+            }
+            state = it->second;
+        }
+
+        std::lock_guard<std::mutex> write_lock(state->write_mutex);
+        return Protocol::writeEvent(client_fd, event_type, payload_json);
+    }
+
     bool addSubscription(int client_fd, uint32_t event_type) {
         std::lock_guard<std::mutex> lock(m_mutex);
         auto it = m_clients.find(client_fd);
@@ -422,6 +441,11 @@ void Server::stop() {
 
 bool Server::push_event(uint32_t event_type, std::string_view payload_json) {
     return m_impl->pushEvent(event_type, std::string(payload_json));
+}
+
+bool Server::push_event_to(int client_fd, uint32_t event_type,
+                           std::string_view payload_json) {
+    return m_impl->pushEventTo(client_fd, event_type, std::string(payload_json));
 }
 
 bool Server::add_subscription(int client_fd, uint32_t event_type) {

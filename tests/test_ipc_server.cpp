@@ -345,6 +345,262 @@ void test_write_serialization() {
 }
 
 // ============================================================
+// 9. push_event_to delivers only to target fd
+// ============================================================
+void test_push_event_to_targeted() {
+    Server server(TEST_SOCKET);
+    std::atomic<int> fd1{-1};
+    std::atomic<int> fd2{-1};
+    std::atomic<int> fd_index{0};
+
+    auto handler = [&fd1, &fd2, &fd_index](uint32_t, std::string_view, int client_fd) -> std::string {
+        int idx = fd_index.fetch_add(1);
+        if (idx == 0) fd1.store(client_fd);
+        else if (idx == 1) fd2.store(client_fd);
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, TEST_SOCKET, sizeof(addr.sun_path) - 1);
+
+    // Connect two raw clients and capture their server-side fds
+    int sock1 = socket(AF_UNIX, SOCK_STREAM, 0);
+    int sock2 = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(sock1 >= 0 && sock2 >= 0);
+    assert(connect(sock1, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+    assert(connect(sock2, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    std::string req = Protocol::encodeRequest(1, "{}");
+    assert(Protocol::writeAll(sock1, req.data(), req.size()));
+    assert(Protocol::writeAll(sock2, req.data(), req.size()));
+
+    int32_t status;
+    std::string resp;
+    assert(Protocol::readResponse(sock1, status, resp, 10485760));
+    assert(Protocol::readResponse(sock2, status, resp, 10485760));
+
+    for (int i = 0; i < 50; i++) {
+        if (fd1.load() >= 0 && fd2.load() >= 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    int cfd1 = fd1.load();
+    int cfd2 = fd2.load();
+    assert(cfd1 >= 0 && cfd2 >= 0);
+
+    // Both subscribe to event_type=300
+    assert(server.add_subscription(cfd1, 300));
+    assert(server.add_subscription(cfd2, 300));
+
+    // Directed push to fd1 only
+    assert(server.push_event_to(cfd1, 300, R"({"target":"fd1"})"));
+
+    // fd1 receives the event
+    uint32_t et;
+    std::string payload;
+    assert(Protocol::readEvent(sock1, et, payload, 10485760));
+    assert(et == 300);
+    assert(payload == R"({"target":"fd1"})");
+
+    // fd2 should NOT receive - set short timeout and verify no data
+    struct timeval short_tv;
+    short_tv.tv_sec = 0;
+    short_tv.tv_usec = 100000;  // 100ms
+    setsockopt(sock2, SOL_SOCKET, SO_RCVTIMEO, &short_tv, sizeof(short_tv));
+    char buf[16];
+    ssize_t n = recv(sock2, buf, sizeof(buf), 0);
+    assert(n < 0);  // timeout - no data
+
+    // Restore timeout and verify broadcast reaches both
+    struct timeval long_tv;
+    long_tv.tv_sec = 60;
+    long_tv.tv_usec = 0;
+    setsockopt(sock2, SOL_SOCKET, SO_RCVTIMEO, &long_tv, sizeof(long_tv));
+
+    assert(server.push_event(300, R"({"broadcast":true})"));
+    assert(Protocol::readEvent(sock1, et, payload, 10485760));
+    assert(et == 300 && payload == R"({"broadcast":true})");
+    assert(Protocol::readEvent(sock2, et, payload, 10485760));
+    assert(et == 300 && payload == R"({"broadcast":true})");
+
+    close(sock1);
+    close(sock2);
+    server.stop();
+    std::cout << "  [PASS] test_push_event_to_targeted" << std::endl;
+}
+
+// ============================================================
+// 10. push_event_to returns false for non-existent fd
+// ============================================================
+void test_push_event_to_nonexistent_fd() {
+    Server server(TEST_SOCKET);
+    auto handler = [](uint32_t, std::string_view, int) -> std::string { return "{}"; };
+    assert(server.start(handler));
+
+    // fd 99999 does not exist in the connection table
+    assert(!server.push_event_to(99999, 100, R"({"test":true})"));
+
+    server.stop();
+    std::cout << "  [PASS] test_push_event_to_nonexistent_fd" << std::endl;
+}
+
+// ============================================================
+// 11. push_event_to returns false for unsubscribed event_type
+// ============================================================
+void test_push_event_to_unsubscribed() {
+    Server server(TEST_SOCKET);
+    std::atomic<int> captured_fd{-1};
+
+    auto handler = [&captured_fd](uint32_t, std::string_view, int client_fd) -> std::string {
+        captured_fd.store(client_fd);
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(sock >= 0);
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, TEST_SOCKET, sizeof(addr.sun_path) - 1);
+    assert(connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    std::string req = Protocol::encodeRequest(1, "{}");
+    assert(Protocol::writeAll(sock, req.data(), req.size()));
+    int32_t status;
+    std::string resp;
+    assert(Protocol::readResponse(sock, status, resp, 10485760));
+
+    for (int i = 0; i < 50; i++) {
+        if (captured_fd.load() >= 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    int fd = captured_fd.load();
+    assert(fd >= 0);
+
+    // fd exists but is NOT subscribed to event_type=400
+    assert(!server.push_event_to(fd, 400, R"({"test":true})"));
+
+    // Subscribe and it should work
+    assert(server.add_subscription(fd, 400));
+    assert(server.push_event_to(fd, 400, R"({"test":true})"));
+
+    uint32_t et;
+    std::string payload;
+    assert(Protocol::readEvent(sock, et, payload, 10485760));
+    assert(et == 400 && payload == R"({"test":true})");
+
+    close(sock);
+    server.stop();
+    std::cout << "  [PASS] test_push_event_to_unsubscribed" << std::endl;
+}
+
+// ============================================================
+// 12. push_event_to returns false for disconnected fd
+// ============================================================
+void test_push_event_to_disconnected() {
+    Server server(TEST_SOCKET);
+    std::atomic<int> captured_fd{-1};
+
+    auto handler = [&captured_fd](uint32_t, std::string_view, int client_fd) -> std::string {
+        captured_fd.store(client_fd);
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(sock >= 0);
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, TEST_SOCKET, sizeof(addr.sun_path) - 1);
+    assert(connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    std::string req = Protocol::encodeRequest(1, "{}");
+    assert(Protocol::writeAll(sock, req.data(), req.size()));
+    int32_t status;
+    std::string resp;
+    assert(Protocol::readResponse(sock, status, resp, 10485760));
+
+    for (int i = 0; i < 50; i++) {
+        if (captured_fd.load() >= 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    int fd = captured_fd.load();
+    assert(fd >= 0);
+
+    // Subscribe then disconnect
+    assert(server.add_subscription(fd, 500));
+    close(sock);
+
+    // Wait for server to detect disconnect and clean up
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // push_event_to should return false (fd removed from m_clients)
+    assert(!server.push_event_to(fd, 500, R"({"test":true})"));
+
+    server.stop();
+    std::cout << "  [PASS] test_push_event_to_disconnected" << std::endl;
+}
+
+// ============================================================
+// 13. push_event_to write serialization - events complete and in order
+// ============================================================
+void test_push_event_to_write_serialization() {
+    Server server(TEST_SOCKET);
+    std::atomic<int> captured_fd{-1};
+
+    auto handler = [&captured_fd](uint32_t, std::string_view, int client_fd) -> std::string {
+        captured_fd.store(client_fd);
+        return "{}";
+    };
+    assert(server.start(handler));
+
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(sock >= 0);
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, TEST_SOCKET, sizeof(addr.sun_path) - 1);
+    assert(connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    std::string req = Protocol::encodeRequest(1, "{}");
+    assert(Protocol::writeAll(sock, req.data(), req.size()));
+    int32_t status;
+    std::string resp;
+    assert(Protocol::readResponse(sock, status, resp, 10485760));
+
+    for (int i = 0; i < 50; i++) {
+        if (captured_fd.load() >= 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    int fd = captured_fd.load();
+    assert(fd >= 0);
+    assert(server.add_subscription(fd, 600));
+
+    // Push multiple events rapidly via push_event_to
+    for (int i = 0; i < 20; i++) {
+        std::string payload = R"({"seq":)" + std::to_string(i) + R"(})";
+        assert(server.push_event_to(fd, 600, payload));
+    }
+
+    // Read all events - should be complete and in order
+    for (int i = 0; i < 20; i++) {
+        uint32_t et;
+        std::string payload;
+        assert(Protocol::readEvent(sock, et, payload, 10485760));
+        assert(et == 600);
+        assert(payload == R"({"seq":)" + std::to_string(i) + R"(})");
+    }
+
+    close(sock);
+    server.stop();
+    std::cout << "  [PASS] test_push_event_to_write_serialization" << std::endl;
+}
+
+// ============================================================
 // Main
 // ============================================================
 int main() {
@@ -361,6 +617,11 @@ int main() {
     test_subscription_and_push();
     test_disconnect_handler_once();
     test_write_serialization();
+    test_push_event_to_targeted();
+    test_push_event_to_nonexistent_fd();
+    test_push_event_to_unsubscribed();
+    test_push_event_to_disconnected();
+    test_push_event_to_write_serialization();
 
     // Final cleanup
     unlink(TEST_SOCKET);
