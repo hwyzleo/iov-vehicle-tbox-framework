@@ -106,6 +106,13 @@ std::vector<std::string> ImmutableConfigViewImpl::getKeys() const {
     return keys;
 }
 
+YAML::Node ImmutableConfigViewImpl::toYamlClone() const {
+    // CR-008: 直接从合并后的完整 YAML 文本重新解析，得到独立完整树。
+    // YAML::Load 每次返回全新的 YAML::Node，与内部状态隔离；
+    // 同时无损保留 sequence / map / null / 嵌套结构。
+    return YAML::Load(m_yamlStr);
+}
+
 YAML::Node ImmutableConfigViewImpl::getNode(const std::string& key) const {
     YAML::Node root = YAML::Load(m_yamlStr);
     std::vector<std::string> parts = splitPath(key);

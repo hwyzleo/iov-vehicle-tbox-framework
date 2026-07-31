@@ -26,6 +26,12 @@ public:
     std::shared_ptr<const ImmutableConfigView> getSection(const std::string& key) const override;
     std::vector<std::string> getKeys() const override;
 
+    // CR-008: 从合并后的完整 YAML 文本重新解析，返回独立完整树。
+    // 该方法为受控内部接口（非公共虚函数），不暴露给 framework-config 消费方。
+    // 每次调用产生独立 YAML::Node，天然与内部快照隔离，且无损保留所有节点类型
+    // （scalar / map / sequence / null / 任意嵌套），替代基于 getter 的有损反向拼树。
+    YAML::Node toYamlClone() const;
+
 private:
     // 获取节点
     YAML::Node getNode(const std::string& key) const;

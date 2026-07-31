@@ -26,15 +26,18 @@ public:
     }
 
     YAML::Node toYaml() const {
+        // CR-008: 以合并后的完整 YAML 表示为导出事实源，直接重新解析得到独立完整树，
+        // 不再通过 getKeys/getSection/getString 反向拼树（后者无法完备表达 YAML AST，
+        // 会丢失 sequence-of-maps、嵌套 sequence 等结构）。
+        // 每次返回独立 YAML::Node，天然与内部不可变快照隔离，调用方修改不反向污染。
         if (!m_loaded || !m_snapshot) {
             return YAML::Node();
         }
-        // ImmutableConfigViewImpl 内部存有 YAML 字符串，重新解析即可
-        // 这里通过 ImmutableConfigView 的 getKeys + getNode 重建
-        // 但更高效的方式是直接从 Impl 拿原始字符串
-        // 由于 Impl 持有 m_snapshot（ImmutableConfigViewImpl），
-        // 我们通过 snapshot 的公共接口重建 YAML::Node
-        return rebuildYamlFromSnapshot(m_snapshot);
+        auto impl = std::dynamic_pointer_cast<const ImmutableConfigViewImpl>(m_snapshot);
+        if (!impl) {
+            return YAML::Node();
+        }
+        return impl->toYamlClone();
     }
 
     std::shared_ptr<const ImmutableConfigView> getSnapshot() const {
@@ -124,22 +127,6 @@ private:
     std::shared_ptr<const ImmutableConfigView> m_snapshot;
     bool m_loaded = false;
     ConfigErrorInfo m_lastError = {ConfigError::kOk, "", ""};
-
-    // 从 snapshot 的公共接口重建 YAML::Node
-    static YAML::Node rebuildYamlFromSnapshot(const std::shared_ptr<const ImmutableConfigView>& snapshot) {
-        if (!snapshot) return YAML::Node();
-        YAML::Node root;
-        for (const auto& key : snapshot->getKeys()) {
-            auto section = snapshot->getSection(key);
-            if (section) {
-                root[key] = rebuildYamlFromSnapshot(section);
-            } else if (snapshot->has(key)) {
-                // 尝试作为标量读取
-                root[key] = snapshot->getString(key);
-            }
-        }
-        return root;
-    }
 };
 
 // ConfigManager 单例实现
