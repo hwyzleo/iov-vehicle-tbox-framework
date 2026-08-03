@@ -300,7 +300,7 @@ install_project() {
     fi
 
     print_success "安装完成"
-    print_info "消费方请使用: -DTBoxFramework_DIR=${INSTALL_PREFIX}/lib/cmake/TBoxFramework"
+    print_info "消费方请使用: -DTboxFramework_DIR=${INSTALL_PREFIX}/lib/cmake/TboxFramework"
     return 0
 }
 
@@ -322,9 +322,9 @@ show_summary() {
     echo ""
     if [ "$INSTALL_AFTER_BUILD" = true ]; then
         echo "安装位置:"
-        echo "  - 库文件:    ${INSTALL_PREFIX}/lib/"
-        echo "  - 头文件:    ${INSTALL_PREFIX}/include/tbox-framework/"
-        echo "  - CMake配置: ${INSTALL_PREFIX}/lib/cmake/TBoxFramework/"
+        echo "  - 组件静态库: ${INSTALL_PREFIX}/lib/libframework-*.a"
+        echo "  - 头文件:      ${INSTALL_PREFIX}/include/tbox-framework/"
+        echo "  - CMake配置:   ${INSTALL_PREFIX}/lib/cmake/TboxFramework/"
     fi
     echo "=========================================="
 }

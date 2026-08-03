@@ -1,0 +1,39 @@
+# TboxFrameworkConfig.cmake.in - 可重定位的 CMake package 配置
+#
+# 安装位置: <prefix>/<libdir>/cmake/TboxFramework/TboxFrameworkConfig.cmake
+# 本文件不固化 CMAKE_INSTALL_PREFIX，通过相对路径推导前缀，使同一套产物
+# 可在不同前缀（本地 ~/.local、生产 /opt/tbox、BUILD staging）下被消费。
+#
+# 依赖（由消费方环境的 CMAKE_PREFIX_PATH/CMAKE_FIND_ROOT_PATH 解析）:
+#   - yaml-cpp (BUILD: TBOX_DEP_STAGING；host: system/homebrew)
+#   - OpenSSL  (sysroot 或 system)
+#   - Threads  (sysroot 或 system)
+# spdlog 由 framework 自包含（header-only 随 SDK 安装），无需 find_dependency。
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# yaml-cpp 是 framework-config/store/log/application 的依赖。
+# 在 BUILD 中通过 TBOX_DEP_STAGING 命中锁定的 aarch64 包。
+find_dependency(yaml-cpp CONFIG)
+
+# OpenSSL 仅供 framework-application 内部 AES 解密使用（PRIVATE）。
+# 静态库的 PRIVATE 依赖在最终链接时需由消费方解析。
+find_dependency(OpenSSL)
+
+# pthread（framework-store/log/ipc/application 的 PRIVATE 依赖）。
+find_dependency(Threads)
+
+# --- 对外变量（兼容早期消费方） ---
+# 推荐使用导出的组件 target: TBoxFramework::hash, ::config, ::store,
+# ::log, ::ipc, ::application, ::spdlog。
+get_filename_component(_tbox_fw_prefix "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+set(TBoxFramework_INCLUDE_DIRS "${_tbox_fw_prefix}/@CMAKE_INSTALL_INCLUDEDIR@/tbox-framework")
+set(TBoxFramework_INCLUDE_DIR "${TBoxFramework_INCLUDE_DIRS}")
+unset(_tbox_fw_prefix)
+
+# 包含导出的组件 targets
+include("${CMAKE_CURRENT_LIST_DIR}/TboxFrameworkTargets.cmake")
+
+set(TBoxFramework_FOUND TRUE)

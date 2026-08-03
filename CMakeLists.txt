@@ -1,162 +1,253 @@
-project(Framework)
-cmake_minimum_required(VERSION 3.10)
+# TBoxFramework - TBOX 基础框架公共库
+#
+# TBOX-FW-DSN-CR-010: 组件化 CMake、GNUInstallDirs、install/export 与 SDK 契约。
+# 承接 TBOX-BUILD-DSN-CR-002 接口契约：
+#   - 6 个独立组件 target: framework-{config,store,log,ipc,hash,application}
+#   - install components: framework-sdk (头文件/静态库/CMake package)
+#                        framework-runtime (运行时动态库；本期静态优先，留空)
+#   - yaml-cpp 由外部 find_package 提供 (BUILD: TBOX_DEP_STAGING; host: system)
+#   - spdlog 由 framework 自包含 (header-only, 随 framework-sdk 安装)
+#   - OpenSSL/pthread 来自 sysroot (Orin) 或 system (host)
+#
+# framework 不设置 compiler/sysroot；由 BUILD toolchain/preset 注入。
 
-# 设置C++标准（如果未被上层项目设置）
+cmake_minimum_required(VERSION 3.16)
+project(TboxFramework VERSION 0.1.0 LANGUAGES C CXX)
+
+# --- C++ 标准（toolchain 可能已设置；不覆盖 Orin preset） ---
 if(NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
-
-# 收集源文件
-file(GLOB_RECURSE FRAMEWORK_SOURCES src/*.cpp)
-file(GLOB_RECURSE FRAMEWORK_HEADERS include/*.h)
-
-# 创建框架库
-add_library(tbox-framework SHARED
-        ${FRAMEWORK_SOURCES}
-        ${FRAMEWORK_HEADERS}
-        )
-set_target_properties(tbox-framework PROPERTIES
-        LINKER_LANGUAGE CXX
-        )
-
-# CR-006 (framework-hash): hash 模块源文件编译启用 -Wall -Wextra -Werror。
-# 仅作用于 hash 源文件，不全局启用以避免既有模块预存告警阻断构建。
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/hash/sha256.cpp
-        PROPERTIES COMPILE_FLAGS "-Wall -Wextra -Werror")
-
-# 根据不同的环境设置不同的库文件目录
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
-    if (APPLE)
-        set(LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/lib/arm64-apple-darwin)
-    elseif (UNIX AND NOT APPLE)
-        set(LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/lib/aarch64-linux-gnu)
-    endif ()
-elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    if (APPLE)
-        set(LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/lib/x86_64-apple-darwin)
-    elseif (UNIX AND NOT APPLE)
-        set(LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/lib/x86_64-linux-gnu)
-    endif ()
-endif ()
-
-# 添加三方库
-if(EXISTS ${LIB_DIR}/yaml-cpp)
-    # 检查 yaml-cpp 目标是否已存在（可能由上层项目通过 find_package 创建）
-    if(TARGET yaml-cpp OR TARGET yaml-cpp::yaml-cpp)
-        message(STATUS "yaml-cpp target already exists, skipping creation")
-    else()
-        # 使用IMPORTED静态库提供include路径
-        add_library(yaml-cpp STATIC IMPORTED)
-        set_target_properties(yaml-cpp PROPERTIES
-            IMPORTED_LOCATION "${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
-            INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/third_party/include"
-        )
-    endif()
-    # 使用LINK_FLAGS直接传递链接选项，避免CMake重排
-    if(APPLE)
-        set_target_properties(tbox-framework PROPERTIES
-            LINK_FLAGS "-force_load ${LIB_DIR}/yaml-cpp/libyaml-cpp.a"
-        )
-    else()
-        set_target_properties(tbox-framework PROPERTIES
-            LINK_FLAGS "-Wl,--whole-archive ${LIB_DIR}/yaml-cpp/libyaml-cpp.a -Wl,--no-whole-archive"
-        )
-    endif()
-
-    # 拷贝 yaml-cpp dylib 到 build 目录
-    file(GLOB YAML_CPP_DYLIBS "${LIB_DIR}/yaml-cpp/*.dylib" "${LIB_DIR}/yaml-cpp/*.so")
-    foreach(YAML_CPP_DYLIB ${YAML_CPP_DYLIBS})
-        add_custom_command(TARGET tbox-framework POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${YAML_CPP_DYLIB}
-                $<TARGET_FILE_DIR:tbox-framework>
-                COMMENT "Copying ${YAML_CPP_DYLIB} to build directory"
-                )
-    endforeach()
-else()
-    message(WARNING "YAML library directory not found: ${LIB_DIR}/yaml-cpp")
+if(NOT CMAKE_C_STANDARD)
+    set(CMAKE_C_STANDARD 11)
+    set(CMAKE_C_STANDARD_REQUIRED ON)
 endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+option(TBOX_FRAMEWORK_BUILD_TESTING "Build framework unit tests" ON)
+
+# ===========================================================================
+# 第三方依赖
+# ===========================================================================
+
+# --- spdlog: framework 自包含 header-only (含 bundled fmt)，随 SDK 安装 ---
+# 设计明确 spdlog 不进 BUILD lock，由 framework 自包含。
+add_library(spdlog INTERFACE)
+target_include_directories(spdlog INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework>
+)
+set_target_properties(spdlog PROPERTIES EXPORT_NAME spdlog)
+
+# --- yaml-cpp: external (BUILD: TBOX_DEP_STAGING; host: system/homebrew) ---
+# 不再使用 third_party 下的预编译库（arch 专属，Orin 不可用）。
+find_package(yaml-cpp CONFIG REQUIRED)
+
+# --- OpenSSL: PRIVATE (仅 utils.cpp AES 解密；sysroot 或 system) ---
 find_package(OpenSSL REQUIRED)
-# OpenSSL 仅供 framework 内部实现使用（include/ 下无任何公共头文件引用 openssl）。
-# 必须是 PRIVATE：否则 ${OPENSSL_INCLUDE_DIR} 的绝对路径会被写进导出的
-# INTERFACE_INCLUDE_DIRECTORIES，使安装包绑死在构建机的 brew 路径上，
-# 交叉编译与生产部署都会引用到不存在的目录。
-target_include_directories(tbox-framework PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(tbox-framework PRIVATE ${OPENSSL_LIBRARIES})
 
-# 设置包含目录
-target_include_directories(tbox-framework
-        PUBLIC
+# --- Threads: pthread (sysroot 或 system) ---
+find_package(Threads REQUIRED)
+
+# ===========================================================================
+# 组件公共设定
+# ===========================================================================
+# 所有组件 PUBLIC 暴露 include/；静态库优先，启用 PIC 以便下游链入 .so。
+function(tbox_framework_component _target)
+    set_target_properties(${_target} PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    target_include_directories(${_target} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/include>
-        $<INSTALL_INTERFACE:include/tbox-framework>
-        PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        )
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework>
+    )
+endfunction()
 
-# 配置文件
-configure_file(TBoxFrameworkConfig.cmake.in
-        "${CMAKE_CURRENT_BINARY_DIR}/TBoxFrameworkConfig.cmake"
-        @ONLY)
+# ===========================================================================
+# framework-hash (无依赖；FIPS 180-4 SHA-256)
+# ===========================================================================
+add_library(framework-hash STATIC
+    src/hash/sha256.cpp
+)
+tbox_framework_component(framework-hash)
+# CR-006: hash 源文件启用 -Wall -Wextra -Werror
+target_compile_options(framework-hash PRIVATE -Wall -Wextra -Werror)
+set_target_properties(framework-hash PROPERTIES EXPORT_NAME hash)
 
-# 安装配置文件
-install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/TBoxFrameworkConfig.cmake"
-        DESTINATION lib/cmake/TBoxFramework
-        )
+# ===========================================================================
+# framework-config (PUBLIC yaml-cpp；配置加载/深合并/校验/不可变快照)
+# ===========================================================================
+add_library(framework-config STATIC
+    src/config/config_manager.cpp
+    src/config/config_merger.cpp
+    src/config/config_validator.cpp
+    src/config/immutable_config_view.cpp
+    src/config/path_resolver.cpp
+)
+tbox_framework_component(framework-config)
+target_include_directories(framework-config PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(framework-config PUBLIC yaml-cpp::yaml-cpp)
+set_target_properties(framework-config PROPERTIES EXPORT_NAME config)
 
-# 配置 pkg-config 文件
-configure_file(TBoxFramework.pc.in
-        "${CMAKE_CURRENT_BINARY_DIR}/TBoxFramework.pc"
-        @ONLY)
+# ===========================================================================
+# framework-store (PRIVATE yaml-cpp/Threads；原子写/文件锁/降写)
+# ===========================================================================
+add_library(framework-store STATIC
+    src/store/store.cpp
+    src/store/store_atomic_writer.cpp
+    src/store/store_file_lock.cpp
+    src/store/store_flush_policy.cpp
+    src/store/store_path_resolver.cpp
+    src/store/store_serializer.cpp
+)
+tbox_framework_component(framework-store)
+target_include_directories(framework-store PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(framework-store PRIVATE yaml-cpp::yaml-cpp Threads::Threads)
+set_target_properties(framework-store PROPERTIES EXPORT_NAME store)
 
-# 安装 pkg-config 文件
-install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/TBoxFramework.pc"
-        DESTINATION lib/pkgconfig
-        )
+# ===========================================================================
+# framework-log (PUBLIC spdlog；PRIVATE yaml-cpp/Threads；统一日志)
+# ===========================================================================
+add_library(framework-log STATIC
+    src/log/log_async_dispatcher.cpp
+    src/log/log_config_adapter.cpp
+    src/log/log_console_sink.cpp
+    src/log/log_emergency_writer.cpp
+    src/log/log_enricher.cpp
+    src/log/log_json_formatter.cpp
+    src/log/log_level_filter.cpp
+    src/log/log_logger.cpp
+    src/log/log_redactor.cpp
+    src/log/log_rolling_file_sink.cpp
+    src/log/log_sink_manager.cpp
+    src/log/log_spdlog_adapter.cpp
+    src/log/log_standard_formatter.cpp
+    src/log/log_types.cpp
+)
+tbox_framework_component(framework-log)
+target_include_directories(framework-log PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(framework-log
+    PUBLIC spdlog
+    PRIVATE yaml-cpp::yaml-cpp Threads::Threads)
+set_target_properties(framework-log PROPERTIES EXPORT_NAME log)
 
-# 安装规则
-install(TARGETS tbox-framework
-        EXPORT TBoxFramework-targets
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-        INCLUDES DESTINATION include/tbox-framework
-        )
+# ===========================================================================
+# framework-ipc (PRIVATE framework-log/Threads；Unix socket IPC)
+# ===========================================================================
+add_library(framework-ipc STATIC
+    src/ipc/ipc_client.cpp
+    src/ipc/ipc_log_adapter.cpp
+    src/ipc/ipc_protocol.cpp
+    src/ipc/ipc_server.cpp
+)
+tbox_framework_component(framework-ipc)
+target_include_directories(framework-ipc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(framework-ipc PRIVATE framework-log Threads::Threads)
+set_target_properties(framework-ipc PROPERTIES EXPORT_NAME ipc)
 
+# ===========================================================================
+# framework-application
+# (PUBLIC framework-config/framework-log/yaml-cpp/spdlog；PRIVATE OpenSSL/Threads)
+# 含 src/utils.cpp (hwyz::Utils, AES/file/base64)，折入 application 因共享 hwyz::
+# 命名空间且无内部调用者；application.cpp 直接 include log 私有头，故 PRIVATE src。
+# ===========================================================================
+add_library(framework-application STATIC
+    src/application.cpp
+    src/utils.cpp
+)
+tbox_framework_component(framework-application)
+target_include_directories(framework-application PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(framework-application
+    PUBLIC framework-config framework-log yaml-cpp::yaml-cpp spdlog
+    PRIVATE OpenSSL::Crypto Threads::Threads)
+set_target_properties(framework-application PROPERTIES EXPORT_NAME application)
+
+# ===========================================================================
+# 内部便利 target（仅测试用，不安装）：聚合全部组件
+# ===========================================================================
+add_library(framework-all INTERFACE)
+target_link_libraries(framework-all INTERFACE
+    framework-hash framework-config framework-store
+    framework-log framework-ipc framework-application)
+
+# ===========================================================================
+# 安装：组件静态库 + 公共头 + spdlog 头 + CMake package -> framework-sdk
+# ===========================================================================
+
+# 组件静态库 + spdlog 导出
+install(TARGETS
+        framework-hash framework-config framework-store
+        framework-log framework-ipc framework-application
+        spdlog
+    EXPORT TboxFrameworkTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT framework-sdk
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT framework-sdk
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT framework-sdk
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework
+)
+
+# 公共头文件
 install(DIRECTORY include/
-        DESTINATION include/tbox-framework
-        FILES_MATCHING PATTERN "*.h"
-        )
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework
+    COMPONENT framework-sdk
+    FILES_MATCHING PATTERN "*.h"
+)
 
-# 自包含 yaml-cpp / spdlog：framework 的公共头文件与实现依赖这两者，
-# yaml-cpp 的静态库已被 force_load/whole-archive 进 libtbox-framework（符号对外可见），
-# spdlog 为 header-only 且自带 bundled fmt，无需外部 fmt 包。
-# 全部装到 include/tbox-framework/ 下，正好被已有的 INSTALL_INTERFACE 包含路径覆盖，
-# 消费方因此不会再意外命中构建机上的 brew / conda 副本（版本漂移的根源）。
-install(DIRECTORY third_party/include/yaml-cpp
-        DESTINATION include/tbox-framework
-        FILES_MATCHING PATTERN "*.h"
-        )
-
+# spdlog header-only（自包含，随 SDK 安装；消费方无需自备 spdlog）
 install(DIRECTORY third_party/include/spdlog
-        DESTINATION include/tbox-framework
-        FILES_MATCHING PATTERN "*.h"
-        )
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework
+    COMPONENT framework-sdk
+    FILES_MATCHING PATTERN "*.h"
+)
 
-# 导出配置
-install(EXPORT TBoxFramework-targets
-        FILE TBoxFrameworkTargets.cmake
-        NAMESPACE TBoxFramework::
-        DESTINATION lib/cmake/TBoxFramework
-        )
+# framework-runtime: 本期组件纯静态，无运行时 .so；component 存在但安装为空，
+# 符合设计「静态链接组件不重复进入 rootfs」。未来引入动态库时填充。
 
-# 单元测试
-enable_testing()
+# --- CMake package ---
+set(TBOX_FRAMEWORK_CMAKE_CONFIG_DEST
+    ${CMAKE_INSTALL_LIBDIR}/cmake/TboxFramework)
 
-set(TEST_SOURCES
+# 配置版本文件
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# 配置文件（可重定位：不固化 CMAKE_INSTALL_PREFIX）
+configure_file(cmake/TboxFrameworkConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfig.cmake"
+    @ONLY)
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfigVersion.cmake"
+    DESTINATION ${TBOX_FRAMEWORK_CMAKE_CONFIG_DEST}
+    COMPONENT framework-sdk
+)
+
+install(EXPORT TboxFrameworkTargets
+    FILE TboxFrameworkTargets.cmake
+    NAMESPACE TBoxFramework::
+    DESTINATION ${TBOX_FRAMEWORK_CMAKE_CONFIG_DEST}
+    COMPONENT framework-sdk
+)
+
+# ===========================================================================
+# 单元测试（HOST 优先；BUILD_TESTING 控制）
+# ===========================================================================
+if(TBOX_FRAMEWORK_BUILD_TESTING)
+    enable_testing()
+
+    set(TEST_SOURCES
         tests/test_config_manager.cpp
         tests/test_path_resolver.cpp
         tests/test_store_path_resolver.cpp
@@ -191,21 +282,17 @@ set(TEST_SOURCES
         tests/test_application_integration.cpp
         )
 
-foreach(TEST_SOURCE ${TEST_SOURCES})
-    get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-    add_executable(${TEST_NAME} ${TEST_SOURCE})
-    # CR-006: hash 测试启用 -Wall -Wextra -Werror
-    if(${TEST_NAME} MATCHES "sha256")
-        target_compile_options(${TEST_NAME} PRIVATE -Wall -Wextra -Werror)
-    endif()
-    target_link_libraries(${TEST_NAME} PRIVATE tbox-framework yaml-cpp pthread)
-    target_include_directories(${TEST_NAME} PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/src
-            )
-    if(EXISTS ${LIB_DIR}/yaml-cpp)
-        target_link_directories(${TEST_NAME} PRIVATE $<BUILD_INTERFACE:${LIB_DIR}/yaml-cpp>)
-    endif()
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-endforeach()
+    foreach(TEST_SOURCE ${TEST_SOURCES})
+        get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+        add_executable(${TEST_NAME} ${TEST_SOURCE})
+        target_link_libraries(${TEST_NAME} PRIVATE framework-all)
+        # 测试可能 include 组件私有头（src/ 下），保留 src 作为 PRIVATE include
+        target_include_directories(${TEST_NAME} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+        # CR-006: hash 测试启用 -Wall -Wextra -Werror
+        if(${TEST_NAME} MATCHES "sha256")
+            target_compile_options(${TEST_NAME} PRIVATE -Wall -Wextra -Werror)
+        endif()
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endforeach()
+endif()

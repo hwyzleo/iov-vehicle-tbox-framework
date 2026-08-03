@@ -35,9 +35,12 @@
 cmake-build-debug/
 .idea/
 build/
+install/
 
 graphify-out
 docs/superpowers
+# third_party: 仅 spdlog (header-only, framework 自包含) 入库；
+# yaml-cpp 已改 external find_package，预编译库不再需要。
 third_party/
 Testing/
 .superpowers/
