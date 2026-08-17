@@ -105,16 +105,22 @@ public:
     }
 
     void cancel() {
+        // 串行化 cancel()，保证并发调用时只 join 一次（重复 join 同一线程是 UB）。
+        std::lock_guard<std::mutex> lock(m_cancelMutex);
+
+        // 仅首个把 m_active 从 true 翻转为 false 的调用负责 shutdown 唤醒读取线程
+        //（fd 归 runLoop 所有，由其负责 close）。
         bool expected = true;
-        if (!m_active.compare_exchange_strong(expected, false)) {
-            return;  // Already cancelled
+        if (m_active.compare_exchange_strong(expected, false)) {
+            int fd = m_fd.exchange(-1);
+            if (fd >= 0) {
+                shutdown(fd, SHUT_RDWR);
+            }
         }
 
-        int fd = m_fd.exchange(-1);
-        if (fd >= 0) {
-            shutdown(fd, SHUT_RDWR);
-        }
-
+        // 无条件 join：即使 runLoop 已自行终止（如订阅被服务端拒绝时
+        // m_active 已被置 false，线程已完成），也必须 join。否则遗留一个
+        // joinable 的 std::thread，析构时 ~std::thread 会触发 std::terminate()。
         if (m_thread.joinable()) {
             m_thread.join();
         }
@@ -250,6 +256,7 @@ private:
 
     std::atomic<bool> m_active{true};
     std::atomic<int> m_fd{-1};
+    std::mutex m_cancelMutex;  // 串行化 cancel()，保证只 join 一次
     std::thread m_thread;
 };
 

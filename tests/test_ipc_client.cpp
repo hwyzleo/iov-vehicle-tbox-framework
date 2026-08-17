@@ -7,6 +7,7 @@
 #include <cassert>
 #include <iostream>
 #include <cstring>
+#include <stdexcept>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -447,6 +448,54 @@ void test_subscribe_old_overload_empty_params() {
 }
 
 // ============================================================
+// 13. Subscription rejected by server - cancel() must still join
+//     Regression: runLoop self-terminates (m_active=false) when the
+//     server rejects the subscribe; cancel() used to early-return via
+//     compare_exchange_strong and skip join, leaving a joinable
+//     std::thread whose destruction calls std::terminate().
+// ============================================================
+void test_subscribe_rejected() {
+    Server server(TEST_SOCKET);
+    // Handler throws => server responds with non-zero status => subscription rejected
+    auto handler = [](uint32_t, std::string_view, int) -> std::string {
+        throw std::runtime_error("subscribe rejected");
+    };
+    assert(server.start(handler));
+
+    Client client(TEST_SOCKET);
+
+    // Path A: cancel() after runLoop self-terminated, then destroy handle
+    {
+        Subscription sub = client.subscribe(10, 200, [](uint32_t, std::string_view) {});
+        // Wait for runLoop to self-terminate after rejection
+        for (int i = 0; i < 50; ++i) {
+            if (!sub.isActive()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        assert(!sub.isActive());
+
+        // Must not crash / std::terminate (used to skip join here)
+        sub.cancel();
+    }  // Subscription destroyed above - must not crash
+
+    // Path B: Client::disconnect() cancels a still-alive rejected subscription
+    {
+        Subscription sub = client.subscribe(10, 200, [](uint32_t, std::string_view) {});
+        for (int i = 0; i < 50; ++i) {
+            if (!sub.isActive()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        assert(!sub.isActive());
+
+        client.disconnect();  // cancel() via Client::Impl::disconnect()
+        sub.cancel();         // idempotent second cancel - must not crash
+    }
+
+    server.stop();
+    std::cout << "  [PASS] test_subscribe_rejected" << std::endl;
+}
+
+// ============================================================
 // Main
 // ============================================================
 int main() {
@@ -466,6 +515,7 @@ int main() {
     test_subscribe_params_ownership();
     test_subscribe_params_reconnect();
     test_subscribe_old_overload_empty_params();
+    test_subscribe_rejected();
 
     unlink(TEST_SOCKET);
 
