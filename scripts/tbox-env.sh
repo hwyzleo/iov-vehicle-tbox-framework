@@ -21,10 +21,27 @@
 : "${TBOX_PREFIX:=${HOME}/.local}"
 export TBOX_PREFIX
 
-# 消费方定位 TBoxFrameworkConfig.cmake 的目录。
-# 两个变量都导出：CMAKE_PREFIX_PATH 是通用入口，TBoxFramework_DIR 是精确指定，
-# 后者可以绕过 CMake 默认搜索路径里可能存在的旧副本（如 /usr/local）。
-export TBoxFramework_DIR="${TBOX_PREFIX}/lib/cmake/TBoxFramework"
+# 消费方定位 TboxFrameworkConfig.cmake 的目录。
+#
+# 注意大小写：package 名是 TboxFramework（安装文件 TboxFrameworkConfig.cmake，
+# 目录 lib/cmake/TboxFramework），只有 target 命名空间才是 TBoxFramework::。
+# CMake 的 <PackageName>_DIR 变量名大小写敏感（与文件系统敏感性无关），
+# 故 find_package(TboxFramework) 只认 TboxFramework_DIR。
+export TboxFramework_DIR="${TBOX_PREFIX}/lib/cmake/TboxFramework"
+
+# 兼容别名：历史上各服务 scripts/build.sh 传 -DTBoxFramework_DIR="${TBoxFramework_DIR}"
+# （大写 B，CMake 其实不会读取）。保留导出，避免这些脚本传入空值。
+# 新增脚本请统一使用 TboxFramework_DIR 或 CMAKE_PREFIX_PATH。
+export TBoxFramework_DIR="${TboxFramework_DIR}"
+
+# CMAKE_PREFIX_PATH 通用入口：framework 与各服务 client SDK（TboxProvClient /
+# TboxSecClient / ...）都装在同一前缀下，一个入口即可解析全部 package。
+# 幂等：本文件会被多个 build.sh source，已包含则不重复追加。
+case ":${CMAKE_PREFIX_PATH:-}:" in
+    *":${TBOX_PREFIX}:"*) ;;
+    "::") export CMAKE_PREFIX_PATH="${TBOX_PREFIX}" ;;
+    *)    export CMAKE_PREFIX_PATH="${TBOX_PREFIX}:${CMAKE_PREFIX_PATH}" ;;
+esac
 
 # framework 源码树位置（供仍需引用源码/第三方库的场景使用）
 TBOX_ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

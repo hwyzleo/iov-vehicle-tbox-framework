@@ -223,9 +223,21 @@ write_basic_package_version_file(
 )
 
 # 配置文件（可重定位：不固化 CMAKE_INSTALL_PREFIX）
-configure_file(cmake/TboxFrameworkConfig.cmake.in
+#
+# 必须用 configure_package_config_file 而非 configure_file：
+#   - @PACKAGE_INIT@ 只有前者会展开（后者 @ONLY 下会把它替换成空串，因为
+#     PACKAGE_INIT 不是普通变量），导致拿不到 PACKAGE_PREFIX_DIR，只能手工
+#     用相对层级推导前缀 —— 历史上就是这么多跳了一级，使
+#     TBoxFramework_INCLUDE_DIRS 指向 <prefix>/../include/tbox-framework。
+#   - PATH_VARS 让 CMake 自己算出可重定位的绝对路径，层级不会再写错。
+set(TBOX_FRAMEWORK_INCLUDE_INSTALL_DIR
+    ${CMAKE_INSTALL_INCLUDEDIR}/tbox-framework)
+
+configure_package_config_file(cmake/TboxFrameworkConfig.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfig.cmake"
-    @ONLY)
+    INSTALL_DESTINATION ${TBOX_FRAMEWORK_CMAKE_CONFIG_DEST}
+    PATH_VARS TBOX_FRAMEWORK_INCLUDE_INSTALL_DIR
+)
 
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/TboxFrameworkConfig.cmake"

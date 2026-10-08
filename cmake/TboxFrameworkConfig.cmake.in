@@ -1,8 +1,15 @@
 # TboxFrameworkConfig.cmake.in - 可重定位的 CMake package 配置
 #
 # 安装位置: <prefix>/<libdir>/cmake/TboxFramework/TboxFrameworkConfig.cmake
-# 本文件不固化 CMAKE_INSTALL_PREFIX，通过相对路径推导前缀，使同一套产物
-# 可在不同前缀（本地 ~/.local、生产 /opt/tbox、BUILD staging）下被消费。
+# 本文件不固化 CMAKE_INSTALL_PREFIX：configure_package_config_file 注入的初始化
+# 块会从 CMAKE_CURRENT_LIST_DIR 反推 PACKAGE_PREFIX_DIR，使同一套产物可在不同
+# 前缀（本地 ~/.local、生产 /opt/tbox、BUILD staging）下被消费。
+# 注意：本注释不得出现该初始化块的占位符字面量，否则会被一并展开。
+#
+# 注意 package 名与 target 命名空间不同：
+#   package 名          TboxFramework   -> find_package(TboxFramework CONFIG)
+#   target 命名空间     TBoxFramework:: -> TBoxFramework::config 等
+# CMake 的 <PackageName>_DIR 变量名大小写敏感，消费方务必用 TboxFramework_DIR。
 #
 # 依赖（由消费方环境的 CMAKE_PREFIX_PATH/CMAKE_FIND_ROOT_PATH 解析）:
 #   - yaml-cpp (BUILD: TBOX_DEP_STAGING；host: system/homebrew)
@@ -11,6 +18,19 @@
 # spdlog 由 framework 自包含（header-only 随 SDK 安装），无需 find_dependency。
 
 @PACKAGE_INIT@
+
+# --- 对外变量（兼容早期消费方） ---
+# 推荐使用导出的组件 target: TBoxFramework::hash, ::config, ::store,
+# ::log, ::ipc, ::application, ::spdlog —— 它们自带
+# INTERFACE_INCLUDE_DIRECTORIES，无需消费方拼 include 路径。
+#
+# 必须放在所有 find_dependency 之前：PACKAGE_PREFIX_DIR 与 set_and_check 是
+# configure_package_config_file 的约定名，被依赖包的 config（如 yaml-cpp 自己的
+# 初始化块）加载后会就地覆盖，之后再引用就会拿到依赖包的前缀。
+# set_and_check 在路径不存在时直接 FATAL_ERROR，避免再次出现"变量指向不存在
+# 目录但构建仍然通过"的静默错误。
+set_and_check(TBoxFramework_INCLUDE_DIRS "@PACKAGE_TBOX_FRAMEWORK_INCLUDE_INSTALL_DIR@")
+set(TBoxFramework_INCLUDE_DIR "${TBoxFramework_INCLUDE_DIRS}")
 
 include(CMakeFindDependencyMacro)
 
@@ -24,14 +44,6 @@ find_dependency(OpenSSL)
 
 # pthread（framework-store/log/ipc/application 的 PRIVATE 依赖）。
 find_dependency(Threads)
-
-# --- 对外变量（兼容早期消费方） ---
-# 推荐使用导出的组件 target: TBoxFramework::hash, ::config, ::store,
-# ::log, ::ipc, ::application, ::spdlog。
-get_filename_component(_tbox_fw_prefix "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
-set(TBoxFramework_INCLUDE_DIRS "${_tbox_fw_prefix}/@CMAKE_INSTALL_INCLUDEDIR@/tbox-framework")
-set(TBoxFramework_INCLUDE_DIR "${TBoxFramework_INCLUDE_DIRS}")
-unset(_tbox_fw_prefix)
 
 # 包含导出的组件 targets
 include("${CMAKE_CURRENT_LIST_DIR}/TboxFrameworkTargets.cmake")
